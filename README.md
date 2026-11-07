@@ -25,7 +25,7 @@ ValuIQ estimates the 31 August 2026 sale value of all 181,711 supplied unit-styl
 | Chronological validation (3 rolling 2-month folds, scored on confirmed flat sales) | `src/validation/run_validation.py` |
 | Final 5-seed LightGBM and submission CSV, with built-in format checks | `src/predict.py` |
 | Report with maps and charts | `src/report/build_report.py` → `report.html` |
-| Local address-lookup demo (not published: contains supplied sale prices) | `src/demo/build_lookup.py` → `outputs/lookup.html` |
+| Interactive web app: value map, address lookup, accuracy map (React + MapLibre) | `app/`, data from `src/demo/export_app_data.py` |
 
 ## How to run
 
@@ -40,7 +40,8 @@ python -m src.preprocessing.fetch_osm
 python -m src.validation.run_validation     # prints fold results and writes outputs/
 python -m src.predict                       # writes and checks valuation_valuiq.csv
 python -m src.report.build_report           # writes report.html
-python -m src.demo.build_lookup             # writes outputs/lookup.html
+python -m src.demo.export_app_data          # writes app/public/data/ (git-ignored)
+cd app && npm install && npm run dev        # web app at http://localhost:5173
 ```
 
 ## Team

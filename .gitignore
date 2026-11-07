@@ -33,3 +33,8 @@ catboost_info/
 
 # Supplied archives
 *.zip
+
+# Web app: dependencies, build output and generated data (contains supplied sale prices)
+app/node_modules/
+app/dist/
+app/public/data/
