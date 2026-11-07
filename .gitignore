@@ -27,3 +27,6 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# Model training logs
+catboost_info/
