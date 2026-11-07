@@ -57,7 +57,7 @@ cd app && npm install && npm run dev        # web app at http://localhost:5173
 - **Addresses:** Open G-NAF, © Geoscape Australia, licensed by the Commonwealth of Australia under the Open G-NAF End User Licence Agreement (attribution and mailing restriction).
 - **2021 mesh blocks and Census counts:** ABS, © Commonwealth of Australia, CC BY 4.0.
 - **Stations, parks, water and major roads:** © OpenStreetMap contributors, Open Database Licence (ODbL), via the Overpass API.
-- **Report base maps:** OpenStreetMap standard tiles, © OpenStreetMap contributors.
+- **Report base maps:** OpenFreeMap vector tiles, © OpenStreetMap contributors.
 
 ## Limitations
 
