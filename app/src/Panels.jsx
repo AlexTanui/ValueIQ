@@ -171,6 +171,33 @@ function Forecast({ value, suburb, growth }) {
   )
 }
 
+// Street-level and aerial views of the building. Both are today's imagery, shown for context
+// only; neither is a valuation feature. Keyless sources: Google's Street View embed and Esri World Imagery.
+function PlacePhoto({ lat, lng }) {
+  const [view, setView] = useState('street')
+  const dLat = 0.00038, dLng = 0.00076
+  const aerial = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?' +
+    `bbox=${lng - dLng},${lat - dLat},${lng + dLng},${lat + dLat}&bboxSR=4326&imageSR=3857&size=640,380&format=jpg&f=image`
+  return (
+    <div className="photo">
+      <div className="seg">
+        <button className={view === 'street' ? 'on' : ''} onClick={() => setView('street')}>Street view</button>
+        <button className={view === 'aerial' ? 'on' : ''} onClick={() => setView('aerial')}>Aerial</button>
+      </div>
+      <div className="frame">
+        {view === 'street'
+          ? <iframe key={`${lat},${lng}`} title="Street view" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade"
+              src={`https://www.google.com/maps?layer=c&cbll=${lat},${lng}&cbp=11,0,0,0,0&output=svembed`} />
+          : <><img src={aerial} alt="Aerial view of the building" /><span className="pin" /></>}
+      </div>
+      <p className="note">
+        {view === 'street' ? 'Google Street View' : 'Imagery © Esri, Maxar, Earthstar Geographics'} · current imagery, not used in the valuation ·{' '}
+        <a href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`} target="_blank" rel="noreferrer">open in Google Maps ↗</a>
+      </p>
+    </div>
+  )
+}
+
 export function AddressCard({ a, building, comps, onBack, onBuilding, growth, isPublic }) {
   const ev = [
     ['Own last sale', a.ownYears != null ? `sold ${a.ownYears} yrs ago, indexed to Aug 2026` : 'no earlier sale on record', a.own],
@@ -186,6 +213,7 @@ export function AddressCard({ a, building, comps, onBack, onBuilding, growth, is
       <button className="link" onClick={onBack}>← Overview</button>
       <h2>{a.address}</h2>
       <p className="muted">{a.suburb}</p>
+      <PlacePhoto lat={a.lat} lng={a.lng} />
       <div className="k">Estimated value at 31 August 2026</div>
       <div className="big">{money(a.value)}</div>
       <div className="muted">Within-10% band {money(a.value * 0.9)} – {money(a.value * 1.1)}</div>
@@ -238,6 +266,7 @@ export function BuildingCard({ b, units, comps, onBack, onSelect, isPublic }) {
       <button className="link" onClick={onBack}>← Overview</button>
       <h2>{b.street}</h2>
       <p className="muted">{b.suburb}</p>
+      <PlacePhoto lat={b.lat} lng={b.lng} />
       <div className="stats two">
         <Stat k="Median unit value" v={moneyShort(b.value)} />
         <Stat k="Units" v={b.units} d={b.floors ? `up to floor ${b.floors}` : null} />
