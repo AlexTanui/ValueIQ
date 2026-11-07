@@ -12,7 +12,7 @@ function Stat({ k, v, d, good }) {
   )
 }
 
-export function Overview({ summary, layer, theme }) {
+export function Overview({ summary, layer, theme, valueBins = [], setValueBins, binCounts }) {
   const h = summary.headline
   const pal = PALETTE[theme]
   const best = 109 / 227
@@ -20,18 +20,25 @@ export function Overview({ summary, layer, theme }) {
     <>
       {layer === 'values' ? (
         <section>
-          <p className="lede">Each dot is a building, coloured by the median value of its units and sized by unit count. Click a building or search for an address.</p>
-          <div className="legend">
+          <p className="lede">Each dot is a building, coloured by the median value of its units and sized by unit count. Click a price range to filter the map, then click a building or search for an address.</p>
+          <div className="legend filter" role="group" aria-label="Filter buildings by median unit value">
             {pal.seq.map((c, i) => {
               const lo = i === 0 ? null : summary.value_breaks[i - 1]
               const hi = summary.value_breaks[i]
+              const on = valueBins.includes(i)
               return (
-                <span key={c}><i style={{ background: c }} />
-                  {lo == null ? `under ${moneyShort(hi)}` : hi == null ? `${moneyShort(lo)}+` : `${moneyShort(lo)}–${moneyShort(hi)}`}
-                </span>
+                <button key={c} aria-pressed={on} className={on ? 'on' : valueBins.length ? 'off' : ''}
+                  onClick={() => setValueBins(on ? valueBins.filter((k) => k !== i) : [...valueBins, i].sort())}>
+                  <i style={{ background: c }} />
+                  <span>{lo == null ? `under ${moneyShort(hi)}` : hi == null ? `${moneyShort(lo)}+` : `${moneyShort(lo)}–${moneyShort(hi)}`}</span>
+                  {binCounts && <small>{binCounts[i].toLocaleString('en-AU')}</small>}
+                </button>
               )
             })}
           </div>
+          <p className="note">{valueBins.length
+            ? <>Showing {valueBins.reduce((s, i) => s + (binCounts?.[i] || 0), 0).toLocaleString('en-AU')} buildings in {valueBins.length} range{valueBins.length > 1 ? 's' : ''}. <button className="link small" onClick={() => setValueBins([])}>Show all</button></>
+            : 'Showing all buildings. Select one or more ranges to filter.'}</p>
         </section>
       ) : (
         <section>

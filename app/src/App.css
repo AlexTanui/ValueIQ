@@ -142,3 +142,12 @@ th { color: var(--ink-2); font-weight: 600; }
 .tag { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
 td.rng { font-size: 0.7rem; color: var(--ink-2); }
+
+.legend.filter { grid-template-columns: 1fr; gap: 3px; }
+.legend.filter button { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 6px; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; cursor: pointer; color: var(--ink-2); font-size: 0.82rem; }
+.legend.filter button:hover { background: var(--accent-wash); color: var(--ink); }
+.legend.filter button.on { border-color: var(--accent); background: var(--accent-wash); color: var(--ink); font-weight: 600; }
+.legend.filter button.off { opacity: 0.45; }
+.legend.filter i { margin: 0; }
+.legend.filter small { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }

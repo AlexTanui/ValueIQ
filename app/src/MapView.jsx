@@ -83,11 +83,11 @@ function addLayers(map, { buildings, validation, breaks, theme }) {
   })
 }
 
-export default function MapView({ buildings, validation, breaks, theme, layer, selected, onBuilding, recs = [], onRec }) {
+export default function MapView({ buildings, validation, breaks, theme, layer, selected, onBuilding, recs = [], onRec, valueBins = [] }) {
   const ref = useRef(null)
   const mapRef = useRef(null)
   const state = useRef({})
-  state.current = { buildings, validation, breaks, theme, layer, selected, onBuilding, recs, onRec }
+  state.current = { buildings, validation, breaks, theme, layer, selected, onBuilding, recs, onRec, valueBins }
 
   useEffect(() => {
     const map = new maplibregl.Map({
@@ -104,6 +104,7 @@ export default function MapView({ buildings, validation, breaks, theme, layer, s
       applyLayer(map, state.current.layer)
       applySelected(map, state.current.selected)
       applyRecs(map, state.current.recs, false)
+      applyValueFilter(map, state.current.breaks, state.current.valueBins)
     })
     map.on('click', 'recs', (e) => state.current.onRec?.(e.features[0].properties.i))
     map.on('mousemove', 'recs', (e) => {
@@ -151,6 +152,8 @@ export default function MapView({ buildings, validation, breaks, theme, layer, s
 
   useEffect(() => { const m = mapRef.current; if (m && m.getSource('recs')) applyRecs(m, recs, true) }, [recs])
 
+  useEffect(() => { const m = mapRef.current; if (m && m.getLayer('buildings')) applyValueFilter(m, breaks, valueBins) }, [valueBins])
+
   useEffect(() => {
     const m = mapRef.current
     if (!m) return
@@ -168,6 +171,15 @@ function applyLayer(map, layer) {
   map.setPaintProperty('buildings', 'circle-stroke-opacity', layer === 'ask' ? 0.18 : 1)
   map.setLayoutProperty('validation', 'visibility', layer === 'accuracy' ? 'visible' : 'none')
   for (const id of ['recs', 'recs-label']) map.setLayoutProperty(id, 'visibility', layer === 'ask' ? 'visible' : 'none')
+}
+
+// Show only buildings whose median value falls in the selected legend ranges (none selected = all)
+function applyValueFilter(map, breaks, bins) {
+  if (!bins.length) { map.setFilter('buildings', null); return }
+  const v = ['get', 'value']
+  map.setFilter('buildings', ['any', ...bins.map((k) => ['all',
+    ...(k > 0 ? [['>=', v, breaks[k - 1]]] : []),
+    ...(k < breaks.length ? [['<', v, breaks[k]]] : [])])])
 }
 
 function applyRecs(map, recs, fit) {

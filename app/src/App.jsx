@@ -22,6 +22,7 @@ export default function App() {
   const [lifestyle, setLifestyle] = useState(null)
   const [chat, setChat] = useState([])
   const [recs, setRecs] = useState([])
+  const [valueBins, setValueBins] = useState([])
 
   useEffect(() => {
     Promise.all([load('summary.json'), load('buildings.json'), load('validation.json')]).then(([s, b, v]) => {
@@ -45,6 +46,14 @@ export default function App() {
     addresses.forEach((r, i) => { const b = r[7]; if (!m.has(b)) m.set(b, []); m.get(b).push(i) })
     return m
   }, [addresses])
+
+  // Buildings per value range, for the legend filter (same breaks as the map colours)
+  const binCounts = useMemo(() => {
+    if (!summary || !buildings) return null
+    const c = Array(summary.value_breaks.length + 1).fill(0)
+    for (const b of buildings) { const k = summary.value_breaks.findIndex((x) => b.value < x); c[k === -1 ? c.length - 1 : k]++ }
+    return c
+  }, [summary, buildings])
 
   const selected = selectedId != null && addresses ? addressRow(addresses[selectedId]) : null
 
@@ -89,7 +98,7 @@ export default function App() {
               </div>
               {layer === 'ask'
                 ? <Assistant addresses={addresses} lifestyle={lifestyle} chat={chat} setChat={setChat} onResults={showRecs} onSelect={selectAddress} />
-                : <Overview summary={summary} layer={layer} theme={theme} />}
+                : <Overview summary={summary} layer={layer} theme={theme} valueBins={valueBins} setValueBins={setValueBins} binCounts={binCounts} />}
             </>
           )}
         </div>
@@ -97,7 +106,7 @@ export default function App() {
       <main className="mapwrap">
         <MapView buildings={buildings} validation={validation} breaks={summary.value_breaks} theme={theme}
           layer={layer} selected={selected || (buildingId != null ? buildings[buildingId] : null)} onBuilding={selectBuilding}
-          recs={recs} onRec={selectAddress} />
+          recs={recs} onRec={selectAddress} valueBins={valueBins} />
       </main>
     </div>
   )
