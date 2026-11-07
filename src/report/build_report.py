@@ -28,18 +28,18 @@ MODEL_LABELS = {
     "suburb_bedroom_median": "Suburb × bedroom median (ours)",
     "building_bedroom_mean": "Building × bedroom mean (ours)",
     "last_sale_indexed": "Last sale + repeat-sales index (ours)",
-    "lightgbm": "ValuIQ LightGBM",
+    "lightgbm": "LightGBM, single seed (ours)",
+    "lightgbm_seed_avg": "ValuIQ LightGBM, 5-seed average",
 }
 
 
 def building_points(P):
-    u = P[P["property_type"].eq("Unit")]
+    u = P[~P["is_commercial"].astype(bool)]
     b = u.groupby("building_key").agg(
         lat=("lat", "median"), lng=("lng", "median"), value=("value", "median"),
         n=("gnaf_pid", "size"), suburb=("api_suburb", "first"),
-        commercial=("is_commercial", "mean"), age=("bld_age_years", "median"),
+        age=("bld_age_years", "median"),
         floors=("floor_est", "max"))
-    b = b[b["commercial"] < 0.5]
     return [[round(r.lat, 5), round(r.lng, 5), int(round(r.value, -3)), int(r.n), r.suburb,
              None if pd.isna(r.age) else int(r.age), None if pd.isna(r.floors) else int(r.floors)]
             for r in b.itertuples()]
@@ -47,7 +47,7 @@ def building_points(P):
 
 def validation_points(V):
     v = V[V["fold"] == FOLDS[-1][0]]
-    err = v["pred_lightgbm"] / v["sold_price"] - 1
+    err = v["pred_lightgbm_seed_avg"] / v["sold_price"] - 1
     return [[round(a, 5), round(b, 5), round(float(e) * 100, 1),
              None if pd.isna(bd) else int(bd)]
             for a, b, e, bd in zip(v["lat"], v["lng"], err, v["bedrooms"])]
@@ -69,7 +69,7 @@ def main():
     last = S[S["fold"] == FOLDS[-1][0]].set_index("model")
     per_fold = S.pivot(index="model", columns="fold", values="u12_within_10pct")
     comparison = [{"label": MODEL_LABELS[m], "value": float(last.loc[m, "u12_within_10pct"]),
-                   "ours": m == "lightgbm"} for m in MODEL_LABELS]
+                   "ours": m == "lightgbm_seed_avg"} for m in MODEL_LABELS]
     comparison += [{"label": l, "value": v, "ours": False, "organiser": True} for l, v in BENCHMARKS]
     comparison.sort(key=lambda d: d["value"])
 
@@ -85,7 +85,7 @@ def main():
             "within_all": float(r["all_within_10pct"]), "missing": int(r["u12_missing"]),
         })
 
-    units = P[P["property_type"].eq("Unit")]
+    units = P[~P["is_commercial"].astype(bool)]
     data = {
         "buildings": building_points(P),
         "validation": validation_points(V),
@@ -96,14 +96,14 @@ def main():
         "folds": [f"{a} to {b}" for a, b in FOLDS],
         "facts": {
             "n_props": len(P), "n_units": len(units), "n_buildings": int(units["building_key"].nunique()),
-            "n_sales_clean": len(sales), "n_train": int(last.loc["lightgbm", "n_train"]),
-            "n_val": int(last.loc["lightgbm", "n_val"]),
-            "n_val_u12": int(last.loc["lightgbm", "n_val_under_1.2m"]),
-            "headline": float(last.loc["lightgbm", "u12_within_10pct"]),
-            "mdae": float(last.loc["lightgbm", "u12_median_abs_error"]),
-            "r2_all": float(last.loc["lightgbm", "all_r2"]),
+            "n_sales_clean": len(sales), "n_train": int(last.loc["lightgbm_seed_avg", "n_train"]),
+            "n_val": int(last.loc["lightgbm_seed_avg", "n_val"]),
+            "n_val_u12": int(last.loc["lightgbm_seed_avg", "n_val_under_1.2m"]),
+            "headline": float(last.loc["lightgbm_seed_avg", "u12_within_10pct"]),
+            "mdae": float(last.loc["lightgbm_seed_avg", "u12_median_abs_error"]),
+            "r2_all": float(last.loc["lightgbm_seed_avg", "all_r2"]),
             "best_benchmark": 109 / 227,
-            "fold_mean": float(per_fold.loc["lightgbm"].mean()),
+            "fold_mean": float(per_fold.loc["lightgbm_seed_avg"].mean()),
             "unit_median": float(units["value"].median()),
         },
     }

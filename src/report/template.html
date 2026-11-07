@@ -97,7 +97,7 @@ code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radi
 </div>
 
 <h2>2. Held-out validation</h2>
-<p>We used a chronological split that mirrors the competition. The model, price index and every feature were built only from sales <strong>before 1 July 2026</strong>. They were then scored on unit sales from <strong>1 July to 31 August 2026</strong>, which is the same 0–2 month horizon as the judging sales. Because the judging set uses flats under $1.2 million, the headline metric uses that subset.</p>
+<p>We used a chronological split that mirrors the competition. The model, price index and every feature were built only from sales <strong>before 1 July 2026</strong>. They were then scored on <strong>confirmed flat sales</strong> (from the supplied flat-sales file) dated <strong>1 July to 31 August 2026</strong>, which is the same 0–2 month horizon as the judging sales. Each validation flat is valued using only the attributes in the supplied input file, exactly as at judging time, not the bedroom count recorded on the sale itself. Because the judging set uses flats under $1.2 million, the headline metric uses that subset.</p>
 
 <div class="card chart">
   <h3 style="margin-top:0">Share of sales valued within 10%</h3>
@@ -119,7 +119,7 @@ code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radi
 </div>
 
 <h2>3. The market: a repeat-sales price index</h2>
-<p>We matched consecutive sales of the same flat, 66,000+ pairs, and solved a quarterly Bailey–Muth–Nourse index with light smoothing. The index puts every historical sale on the same price footing, and it brings each flat's last sale forward to 31 August 2026. The index is rebuilt inside every validation fold from pre-cutoff sales only.</p>
+<p>We matched consecutive sales of the same flat, tens of thousands of pairs, and solved a quarterly Bailey–Muth–Nourse index with light smoothing. The index puts every historical sale on the same price footing, and it brings each flat's last sale forward to 31 August 2026. The index is rebuilt inside every validation fold from pre-cutoff sales only.</p>
 <div class="card chart">
   <h3 style="margin-top:0">City of Sydney unit price index (31 Aug 2026 quarter = 1.00)</h3>
   <div id="chart-index"></div>
@@ -128,11 +128,11 @@ code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radi
 <h2>4. Method</h2>
 <h3>Data and cleaning</h3>
 <ul>
-  <li><strong>Addresses:</strong> <span data-fact="n_props"></span> addresses from the Microburbs API across 29 suburbs. Of these, <span data-fact="n_units"></span> are unit-type addresses in <span data-fact="n_buildings"></span> buildings. Every address gets a value.</li>
-  <li><strong>Sales:</strong> all unit sales from 1990 to 31 August 2026. We requested them with <code>to_date=2026-08-31</code>, so later sales were never downloaded, and we filtered them again after loading.</li>
-  <li><strong>Bulk sales removed:</strong> whole-building or en-bloc transactions appear as the same price on the same day against many units, some above $600 million. Any price, date and location repeated across 3 or more units was dropped. Prices outside $100k–$20M were also dropped. <span data-fact="n_sales_clean"></span> clean unit sales remain.</li>
-  <li><strong>Buildings:</strong> each address was split into a unit part and a street part, so <code>12/34 RALPH ST</code> belongs to building <code>34 RALPH ST</code>. Floor comes from the API's level field where present, otherwise from hundreds-style unit numbers (1205 → floor 12) in buildings with 20 or more flats.</li>
-  <li><strong>Missing data:</strong> missing bedrooms, bathrooms and parking are kept as missing, never treated as zero. LightGBM learns from the missingness directly.</li>
+  <li><strong>Addresses:</strong> the supplied input file, <span data-fact="n_props"></span> G-NAF IDs across 33 suburbs. Every ID gets a value. Of these, <span data-fact="n_units"></span> are not shops, offices or suites, and they sit in <span data-fact="n_buildings"></span> buildings.</li>
+  <li><strong>Sales evidence:</strong> the supplied confirmed flat sales, plus unit sales from the Microburbs API (requested with <code>to_date=2026-08-31</code>, so later sales were never downloaded), plus both legs of each supplied repeat-sale pair. Records are deduplicated by flat and date, preferring the supplied flat-sales file. Nothing dated after 31 August 2026 is used.</li>
+  <li><strong>Bulk sales removed:</strong> whole-building or en-bloc transactions appear as the same price on the same day against many units, some above $600 million. Any price repeated on the same day across 3 or more flats in one building was dropped. Prices outside $100k–$20M were also dropped. <span data-fact="n_sales_clean"></span> clean sales remain.</li>
+  <li><strong>Buildings:</strong> the street part of each address plus the suburb, so <code>Unit 57, 3 Earl Place</code> belongs to building <code>3 EARL PLACE | Potts Point</code>. Floor comes from "Level N" in the address where present, otherwise from hundreds-style unit numbers (1205 → floor 12) in buildings with 20 or more flats.</li>
+  <li><strong>Unit attributes:</strong> bedrooms, bathrooms and parking come only from the supplied files, never from current API fields. Missing values are kept as missing, never treated as zero. About 73% of input addresses have no bedroom count, and LightGBM learns from the missingness directly.</li>
 </ul>
 
 <h3>Features, all point-in-time</h3>
@@ -140,10 +140,12 @@ code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radi
 <ul>
   <li>the flat's own last sale (index-adjusted) and how long ago it was</li>
   <li>building averages: all units, units with the same bedroom count, and the most recent sale in the building</li>
+  <li><strong>nearby sales:</strong> a distance-weighted average of the 20 nearest sales, and of the 10 nearest sales with the same bedroom count, from the 2 years before each row's information date</li>
   <li>mesh-block, 250 m grid-cell, suburb, and suburb × bedroom averages, each with its sale count</li>
-  <li>unit attributes: bedrooms, bathrooms, parking, flats in building, floor, unit number, dwelling type, and commercial or car-space flags</li>
+  <li>unit attributes: bedrooms, bathrooms, parking, flats in building, floor, unit number, address type (unit, suite, shop and so on), ABS block type, and commercial or car-space flags</li>
   <li>building age, using the first recorded sale as a proxy</li>
   <li>location from OpenStreetMap: distance to the nearest train, metro or light-rail station, stations within 800 m, and distance to the harbour or water, parks and major roads</li>
+  <li>mesh-block homes in 2021 and people per home (ABS Census 2021), plus new homes from 2021 to 2026 (organiser block file)</li>
 </ul>
 <div class="card chart">
   <h3 style="margin-top:0">What drives the model (share of LightGBM gain, top 12)</h3>
@@ -151,28 +153,29 @@ code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radi
 </div>
 
 <h3>The key step: value the building, then the unit</h3>
-<p>Most flats have not sold recently, but their building usually has. ValuIQ treats the building as the main unit of evidence. Every past sale in the building is brought to today's prices with the repeat-sales index and grouped by bedroom count. LightGBM then learns how much to trust this building evidence compared with the flat's own last sale, the neighbourhood, and the unit's own attributes. The building × bedroom average alone is the single most important feature.</p>
+<p>Most flats have not sold recently, but their building usually has. ValuIQ treats the building as the main unit of evidence. Every past sale in the building is brought to today's prices with the repeat-sales index and grouped by bedroom count. LightGBM then learns how much to trust this building evidence compared with the flat's own last sale, the neighbourhood, and the unit's own attributes. The building × bedroom average is the single most important feature, and the same-bedroom nearby-sales average is second.</p>
 
 <h3>Model</h3>
-<p>The model is LightGBM with a Huber loss on index-adjusted log price, so a few extreme sales can't dominate the fit. It uses 1,500 rounds, and sales from the last 3 years get double weight. To produce a value, we add back the index level at the valuation quarter and take the exponential.</p>
+<p>The model is LightGBM with a Huber loss on index-adjusted log price, so a few extreme sales can't dominate the fit. It uses 1,500 rounds, and sales from the last 3 years get double weight. The final value averages five models trained with different random seeds. To produce a value, we add back the index level at the valuation quarter and take the exponential.</p>
 
 <h2>5. What worked and what did not</h2>
 <ul>
-  <li><strong>Worked:</strong> point-in-time building × bedroom evidence was the biggest gain. LightGBM was stable across the three 2-month folds, with a mean within-10% of <span data-fact="fold_mean"></span>. OpenStreetMap location features added a small improvement.</li>
-  <li><strong>Did not work:</strong> CatBoost with the same features was unstable, and some of its predictions blew up in one fold. A 50/50 blend with LightGBM was worse than LightGBM alone, so both were dropped. Simple last-sale indexing was capped at around 46% because many flats have no recent sale of their own.</li>
+  <li><strong>Worked:</strong> point-in-time building × bedroom evidence was the biggest gain. Adding the supplied confirmed sales and repeat-sale pairs to the API sales gave much more evidence per building. Nearby-sales features were neutral on accuracy: with one seed, the mean within-10% was 69.2% with them and 69.6% without, a gap within noise. They rank second by importance but largely duplicate the building evidence. We kept them because they are the only local evidence for buildings with no recorded sales. LightGBM was stable across the three 2-month folds, with a mean within-10% of <span data-fact="fold_mean"></span>. OpenStreetMap location features added a small improvement.</li>
+  <li><strong>Neutral:</strong> averaging five random seeds did not improve within-10% accuracy. It was about 1 point lower than the first seed alone, which is within noise. We kept the average because it doesn't depend on which seed happened to score best.</li>
+  <li><strong>Did not work:</strong> CatBoost with the same features was unstable, and some of its predictions blew up in one fold. A 50/50 blend with LightGBM was worse than LightGBM alone, so both were dropped. Simple last-sale indexing reached only about 50%, because many flats have no recent sale of their own.</li>
 </ul>
 
 <h2>6. Limitations</h2>
 <ul>
-  <li>The supplied input file was not received, so the ID set comes from the Microburbs API's unit addresses. Running <code>src/predict.py</code> with the official input file restricts the output to exactly those IDs.</li>
-  <li>The bedroom, bathroom and parking values from the API reflect each address's most recent advert, and their source dates are not exposed. Validation uses the bedroom count recorded on each sale.</li>
+  <li>The supplied bedroom, bathroom and parking values describe the last advert held, which may be older or newer than the valuation date. Most addresses have none.</li>
+  <li>The 4 suburbs outside the API's coverage (Annandale, Newtown, Paddington and St Peters) rely on the supplied sales only.</li>
   <li>The holdout has a few hundred sales, so differences of about 2–3 points between models are within sampling noise.</li>
-  <li>Houses, shops and offices are valued with the same unit model and are likely less accurate. They are not part of the flat judging set.</li>
+  <li>Shops, offices and car spaces are valued with the same model and are likely less accurate. They are not part of the flat judging set.</li>
 </ul>
 
 <h2>7. Data provenance and licences</h2>
 <ul>
-  <li><strong>Microburbs Hackathon API</strong> (property, sales and suburb data), used under the hackathon terms. No raw API output is published here. This report shows only model outputs and aggregates.</li>
+  <li><strong>Microburbs supplied task files</strong> (input addresses, flat sales, repeat sales, mesh-block homes and people 2021–2026) and the <strong>Microburbs Hackathon API</strong> (unit sales), used under the hackathon terms. No supplied rows or raw API output are published here. This report shows only model outputs and aggregates. The 2026 block figures are Microburbs estimates, not Census results.</li>
   <li><strong>Addresses:</strong> Open G-NAF © Geoscape Australia, licensed by the Commonwealth of Australia (attribution and mailing restriction).</li>
   <li><strong>Mesh blocks:</strong> ABS 2021, © Commonwealth of Australia, CC BY 4.0.</li>
   <li><strong>Stations, parks, water and roads:</strong> © OpenStreetMap contributors, ODbL, via the Overpass API.</li>

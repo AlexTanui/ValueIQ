@@ -24,8 +24,9 @@ OUT_DIR = Path(__file__).resolve().parents[2] / "outputs"
 
 LGB_PARAMS = dict(objective="huber", alpha=0.15, learning_rate=0.03, num_leaves=63,
                   min_child_samples=30, feature_fraction=0.8, bagging_fraction=0.8,
-                  bagging_freq=1, lambda_l2=1.0, verbose=-1, seed=7)
+                  bagging_freq=1, lambda_l2=1.0, verbose=-1)
 N_ROUNDS = 1500
+SEEDS = [7, 11, 23, 42, 101]
 
 
 def training_frame(sales, cutoff, index):
@@ -41,18 +42,21 @@ def _recency_weight(X):
     return np.where(X["sold_date"] >= X["sold_date"].max() - pd.Timedelta(days=3 * 365), 2.0, 1.0)
 
 
-def fit_lgb(X):
-    ds = lgb.Dataset(X[FEATURES], X["target"], weight=_recency_weight(X), categorical_feature="auto")
-    return lgb.train(LGB_PARAMS, ds, num_boost_round=N_ROUNDS)
+def fit_lgb(X, seeds=SEEDS):
+    """One LightGBM model per seed (seed varies bagging and feature sampling)."""
+    ds = lgb.Dataset(X[FEATURES], X["target"], weight=_recency_weight(X), categorical_feature="auto",
+                     free_raw_data=False)
+    return [lgb.train({**LGB_PARAMS, "seed": s}, ds, num_boost_round=N_ROUNDS) for s in seeds]
 
 
-def predict_adj(model, X):
-    """LightGBM prediction in adjusted-log space.
+def predict_adj(models, X):
+    """LightGBM predictions in adjusted-log space: first seed alone, and the seed average.
 
     CatBoost and a 50/50 blend were tested on the same folds and were worse
     and unstable (mean within-10% 38.8% and 45.8% vs 63.5%), so they were dropped.
     """
-    return {"lightgbm": model.predict(X[FEATURES])}
+    preds = np.column_stack([m.predict(X[FEATURES]) for m in models])
+    return {"lightgbm": preds[:, 0], "lightgbm_seed_avg": preds.mean(axis=1)}
 
 
 def baseline_adj(V):
@@ -66,21 +70,30 @@ def baseline_adj(V):
     }
 
 
-def run_fold(sales, start, end):
+def validation_targets(sales, props, cutoff, end):
+    """Confirmed flat sales in the window, with the unit attributes we would
+    actually have at prediction time (the supplied input file), not the sale's."""
+    val = sales[(sales["sold_date"] >= cutoff) & (sales["sold_date"] <= end)
+                & sales["source"].eq("flat_sales")].copy()
+    attrs = props.set_index("gnaf_pid")[["bedrooms", "bathrooms", "car_spaces"]]
+    val[attrs.columns] = attrs.reindex(val["gnaf_pid"]).to_numpy()
+    val["info_date"] = cutoff
+    return val
+
+
+def run_fold(sales, props, start, end):
     cutoff, end = pd.Timestamp(start), pd.Timestamp(end)
     index = build_index(sales, cutoff)
     level = index.iloc[-1]
     history = sales[sales["sold_date"] < cutoff]
 
     X = training_frame(sales, cutoff, index)
-    val = sales[(sales["sold_date"] >= cutoff) & (sales["sold_date"] <= end)].copy()
-    val["info_date"] = cutoff
-    V = build_features(val, history, index)
+    V = build_features(validation_targets(sales, props, cutoff, end), history, index)
 
-    model = fit_lgb(X)
-    adj = {**baseline_adj(V), **predict_adj(model, V)}
+    models = fit_lgb(X)
+    adj = {**baseline_adj(V), **predict_adj(models, V)}
     preds = {k: np.exp(v + level) for k, v in adj.items()}
-    return X, V, preds, model
+    return X, V, preds, models
 
 
 def main():
@@ -88,7 +101,7 @@ def main():
     sales = load_sales(props)
     summary, frames = [], []
     for start, end in FOLDS:
-        X, V, preds, model = run_fold(sales, start, end)
+        X, V, preds, models = run_fold(sales, props, start, end)
         actual = V["sold_price"].to_numpy()
         under = actual < 1_200_000
         for name, p in preds.items():
@@ -109,7 +122,7 @@ def main():
     print(last[["u12_within_10pct", "u12_median_abs_error", "u12_mae", "u12_rmse", "u12_r2",
                 "all_within_10pct", "all_r2"]].round(3).to_string())
 
-    imp = pd.Series(model.feature_importance("gain"), index=FEATURES).sort_values(ascending=False)
+    imp = pd.Series(models[0].feature_importance("gain"), index=FEATURES).sort_values(ascending=False)
     OUT_DIR.mkdir(exist_ok=True)
     S.to_csv(OUT_DIR / "validation_summary.csv", index=False)
     imp.to_csv(OUT_DIR / "feature_importance.csv", header=["gain"])

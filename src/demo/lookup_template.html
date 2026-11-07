@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ValuIQ Address Lookup</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --border: rgba(11,11,11,0.10); --accent: #2a78d6; --accent-wash: #e6f0fc; --bench: #c3c2b7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --accent: #3987e5; --accent-wash: #16263b; --bench: #5a5955;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --border: rgba(255,255,255,0.10); --accent: #3987e5; --accent-wash: #16263b; --bench: #5a5955;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.8rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+.sub { color: var(--ink-2); margin: 0 0 20px; }
+.search { position: relative; }
+input { width: 100%; font: inherit; font-size: 1.1rem; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink); outline: none; }
+input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+.sugg { position: absolute; left: 0; right: 0; top: 100%; margin-top: 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; z-index: 1000; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+.sugg div { padding: 10px 16px; cursor: pointer; color: var(--ink-2); }
+.sugg div.on, .sugg div:hover { background: var(--accent-wash); color: var(--ink); }
+.grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top: 20px; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.k { font-size: 0.85rem; color: var(--ink-2); }
+.big { font-size: 2.8rem; font-weight: 700; letter-spacing: -0.03em; margin: 2px 0; }
+.range { color: var(--ink-2); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { background: var(--page); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 0.85rem; color: var(--ink-2); }
+#map { height: 300px; border-radius: 10px; border: 1px solid var(--border); }
+.leaflet-tile-pane { filter: grayscale(1); opacity: 0.8; }
+.ev { display: grid; grid-template-columns: 170px 1fr 92px; align-items: center; gap: 10px; margin: 10px 0; font-size: 0.9rem; }
+.ev .bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--bench); }
+.ev.final .bar { background: var(--accent); }
+.ev .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.ev .lab { color: var(--ink-2); }
+.ev .lab small { display: block; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--grid); text-align: right; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 600; }
+.empty { color: var(--muted); }
+h3 { margin: 0 0 8px; font-size: 1rem; }
+.note { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ValuIQ address lookup</h1>
+  <p class="sub">Type any City of Sydney flat address to see its estimated value at 31 August 2026 and the evidence behind it.</p>
+  <div class="search">
+    <input id="q" placeholder="e.g. Unit 57, 3 Earl Place" autocomplete="off" autofocus>
+    <div class="sugg" id="sugg" hidden></div>
+  </div>
+  <div id="result"></div>
+</main>
+<script>
+const DATA = /*__DATA__*/null;
+const money = v => v == null ? '–' : '$' + Math.round(v).toLocaleString('en-AU');
+const rows = DATA.rows, lower = rows.map(r => r[1].toLowerCase());
+const q = document.getElementById('q'), sugg = document.getElementById('sugg'), result = document.getElementById('result');
+let hits = [], sel = 0, map, marker;
+
+function search(text) {
+  const terms = text.toLowerCase().replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  const out = [];
+  for (let i = 0; i < rows.length && out.length < 8; i++) if (terms.every(t => lower[i].includes(t))) out.push(i);
+  return out;
+}
+function renderSugg() {
+  sugg.hidden = !hits.length;
+  sugg.innerHTML = hits.map((i, j) => `<div class="${j === sel ? 'on' : ''}" data-i="${i}">${rows[i][1]}</div>`).join('');
+}
+q.addEventListener('input', () => { hits = search(q.value); sel = 0; renderSugg(); });
+q.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, hits.length - 1); renderSugg(); e.preventDefault(); }
+  if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); renderSugg(); e.preventDefault(); }
+  if (e.key === 'Enter' && hits.length) show(hits[sel]);
+});
+sugg.addEventListener('mousedown', e => { const d = e.target.closest('[data-i]'); if (d) show(+d.dataset.i); });
+
+function show(i) {
+  const [id, address, value, bed, bath, car, bkey, lat, lng, own, ownYrs, bldbed, bldbedN, nbr, flats, floor] = rows[i];
+  q.value = address; sugg.hidden = true;
+  const ev = [
+    ['Own last sale', ownYrs != null ? `sold ${ownYrs} yrs ago, brought to Aug 2026` : 'no prior sale', own],
+    ['Same building', bldbedN ? `${bldbedN} sale${bldbedN === 1 ? '' : 's'} of similar units, adjusted` : 'no similar sales', bldbed],
+    ['Nearby recent sales', 'closest sales in last 2 years, distance-weighted', nbr],
+  ];
+  const max = Math.max(value, ...ev.map(e => e[2] || 0)) * 1.05;
+  const evHtml = ev.map(([l, s, v]) => `<div class="ev"><div class="lab">${l}<small>${s}</small></div>
+      <div>${v ? `<div class="bar" style="width:${(v / max * 100).toFixed(1)}%"></div>` : '<span class="empty">–</span>'}</div><div class="val">${money(v)}</div></div>`).join('') +
+    `<div class="ev final"><div class="lab"><strong style="color:var(--ink)">ValuIQ value</strong><small>LightGBM, 5-seed average</small></div>
+      <div><div class="bar" style="width:${(value / max * 100).toFixed(1)}%"></div></div><div class="val"><strong>${money(value)}</strong></div></div>`;
+  const comps = DATA.comps[bkey] || [];
+  const compHtml = comps.length ? `<table><thead><tr><th>Unit</th><th>Sold</th><th>Beds</th><th>Price</th><th>In Aug 2026 $</th></tr></thead><tbody>` +
+    comps.map(([a, d, p, t, b]) => `<tr><td>${a.split(',')[0]}</td><td>${d}</td><td>${b ?? '–'}</td><td>${money(p)}</td><td>${money(t)}</td></tr>`).join('') + '</tbody></table>'
+    : '<p class="empty">No recorded sales in this building before 31 Aug 2026.</p>';
+  const chips = [bed != null ? `${bed} bed` : 'beds unknown', bath != null ? `${bath} bath` : null, car != null ? `${car} car` : null,
+    floor != null ? `floor ${floor}` : null, `${flats} flats in building`].filter(Boolean);
+  result.innerHTML = `<div class="grid">
+    <div class="card"><div class="k">Estimated value at 31 August 2026</div><div class="big">${money(value)}</div>
+      <div class="range">Likely range ${money(value * 0.9)} – ${money(value * 1.1)}</div>
+      <div class="facts">${chips.map(c => `<span class="chip">${c}</span>`).join('')}</div>
+      <h3 style="margin-top:20px">Evidence behind the value</h3>${evHtml}
+      <p class="note">G-NAF ${id}. Only sales up to 31 Aug 2026 are used.</p></div>
+    <div><div class="card" style="padding:12px"><div id="map"></div></div>
+      <div class="card" style="margin-top:16px"><h3>Recent sales in this building</h3>${compHtml}</div></div></div>`;
+  if (map) map.remove();
+  map = L.map('map', { scrollWheelZoom: false }).setView([lat, lng], 17);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+  L.circleMarker([lat, lng], { radius: 9, color: getComputedStyle(document.documentElement).getPropertyValue('--surface'), weight: 2,
+    fillColor: getComputedStyle(document.documentElement).getPropertyValue('--accent'), fillOpacity: 1 }).addTo(map);
+}
+</script>
+</body>
+</html>

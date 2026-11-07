@@ -30,3 +30,6 @@ venv/
 
 # Model training logs
 catboost_info/
+
+# Supplied archives
+*.zip
