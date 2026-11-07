@@ -6,6 +6,7 @@ Files:
   addresses.json   one row per supplied address: value and evidence
   comps.json       recent sales per building (supplied prices -- local only)
   validation.json  Jul-Aug 2026 holdout errors as percentages
+  lifestyle.json   current suburb crime, livability, income and rent (recommendations only)
 
 comps.json contains supplied sale prices, so the folder must never be committed.
 """
@@ -73,7 +74,8 @@ def main():
         [r.gnaf_pid, r.address, r.api_suburb, _num(r.value), _num(r.bedrooms), _num(r.bathrooms),
          _num(r.car_spaces), bidx[r.building_key], round(r.lat, 6), round(r.lng, 6),
          _num(own[i], -3), _num(r.own_years_since, 1), _num(bldbed[i], -3), int(r.bldbed_n),
-         _num(nbr[i], -3), _num(r.floor_est), int(bool(r.is_commercial))]
+         _num(nbr[i], -3), _num(r.floor_est), int(bool(r.is_commercial)), str(r.mb),
+         _num(r.dist_station_m), _num(r.dist_water_m), int(bool(r.is_carspace))]
         for i, r in enumerate(P.itertuples())])
 
     # Recent sales per building (local only)
@@ -115,6 +117,11 @@ def main():
         "value_breaks": [int(round(x, -3)) for x in np.quantile(B.loc[B["commercial"] < 0.5, "value"],
                                                                 [1 / 7 * i for i in range(1, 7)])],
     })
+    # Lifestyle: current indicators for the recommendation assistant only (not valuation features)
+    lifestyle = ROOT / "data" / "lifestyle.json"
+    if lifestyle.exists():
+        (APP_DATA / "lifestyle.json").write_text(lifestyle.read_text())
+
     sizes = {f.name: f"{f.stat().st_size / 1e6:.1f} MB" for f in APP_DATA.glob("*.json")}
     print(f"exported to app/public/data: {sizes}")
 

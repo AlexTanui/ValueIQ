@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
 import Search from './Search'
+import Assistant from './Assistant.jsx'
 import { AddressCard, BuildingCard, Overview } from './Panels'
 import { addressRow, buildingRow } from './format'
 import { prefersDark } from './theme'
@@ -18,6 +19,9 @@ export default function App() {
   const [layer, setLayer] = useState('values')
   const [selectedId, setSelectedId] = useState(null) // address index
   const [buildingId, setBuildingId] = useState(null)
+  const [lifestyle, setLifestyle] = useState(null)
+  const [chat, setChat] = useState([])
+  const [recs, setRecs] = useState([])
 
   useEffect(() => {
     Promise.all([load('summary.json'), load('buildings.json'), load('validation.json')]).then(([s, b, v]) => {
@@ -25,6 +29,7 @@ export default function App() {
     })
     load('addresses.json').then(setAddresses)
     load('comps.json').then(setComps)
+    load('lifestyle.json').then(setLifestyle).catch(() => setLifestyle(null))
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = (e) => setTheme(e.matches ? 'dark' : 'light')
     mq.addEventListener('change', onChange)
@@ -43,7 +48,14 @@ export default function App() {
 
   const selected = selectedId != null && addresses ? addressRow(addresses[selectedId]) : null
 
-  const selectAddress = (i) => { setSelectedId(i); setBuildingId(null); setLayer('values') }
+  const selectAddress = (i) => { setSelectedId(i); setBuildingId(null); if (layer === 'accuracy') setLayer('values') }
+  const showRecs = (r) => {
+    const pin = (i, rank, stretch) => {
+      const a = addresses[i]
+      return { i, rank, stretch, lat: a[8], lng: a[9], address: a[1], suburb: a[2], value: a[3] }
+    }
+    setRecs([...r.results.map((i, k) => pin(i, k + 1, false)), ...r.closest.map((i, k) => pin(i, r.results.length + k + 1, true))])
+  }
   const selectBuilding = (b) => { setBuildingId(b); setSelectedId(null) }
   const back = () => { setSelectedId(null); setBuildingId(null) }
 
@@ -69,13 +81,23 @@ export default function App() {
             <BuildingCard b={buildings[buildingId]} units={(byBuilding?.get(buildingId) || []).map((i) => [i, addressRow(addresses[i])])}
               comps={comps[buildingId] || []} onBack={back} onSelect={selectAddress} />
           ) : (
-            <Overview summary={summary} layer={layer} setLayer={setLayer} theme={theme} />
+            <>
+              <div className="seg three" role="tablist" aria-label="Mode">
+                {[['values', 'Values'], ['accuracy', 'Accuracy'], ['ask', 'Ask ValuIQ']].map(([k, l]) => (
+                  <button key={k} role="tab" aria-selected={layer === k} className={layer === k ? 'on' : ''} onClick={() => setLayer(k)}>{l}</button>
+                ))}
+              </div>
+              {layer === 'ask'
+                ? <Assistant addresses={addresses} lifestyle={lifestyle} chat={chat} setChat={setChat} onResults={showRecs} onSelect={selectAddress} />
+                : <Overview summary={summary} layer={layer} theme={theme} />}
+            </>
           )}
         </div>
       </aside>
       <main className="mapwrap">
         <MapView buildings={buildings} validation={validation} breaks={summary.value_breaks} theme={theme}
-          layer={layer} selected={selected || (buildingId != null ? buildings[buildingId] : null)} onBuilding={selectBuilding} />
+          layer={layer} selected={selected || (buildingId != null ? buildings[buildingId] : null)} onBuilding={selectBuilding}
+          recs={recs} onRec={selectAddress} />
       </main>
     </div>
   )

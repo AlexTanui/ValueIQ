@@ -33,6 +33,7 @@ function addLayers(map, { buildings, validation, breaks, theme }) {
   map.addSource('buildings', { type: 'geojson', data: buildingsGeoJSON(buildings) })
   map.addSource('validation', { type: 'geojson', data: validationGeoJSON(validation) })
   map.addSource('selected', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+  map.addSource('recs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
 
   const color = ['step', ['get', 'value'], pal.seq[0]]
   breaks.forEach((b, k) => color.push(b, pal.seq[k + 1]))
@@ -60,6 +61,20 @@ function addLayers(map, { buildings, validation, breaks, theme }) {
     },
   })
   map.addLayer({
+    id: 'recs', type: 'circle', source: 'recs',
+    paint: {
+      'circle-color': ['case', ['get', 'stretch'], pal.ring, pal.selected],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 9, 16, 13],
+      'circle-stroke-color': pal.selected, 'circle-stroke-width': 2.5,
+    },
+  })
+  map.addLayer({
+    id: 'recs-label', type: 'symbol', source: 'recs',
+    layout: { 'text-field': ['to-string', ['get', 'rank']], 'text-size': 11, 'text-allow-overlap': true,
+      'text-font': ['Noto Sans Bold'] },
+    paint: { 'text-color': ['case', ['get', 'stretch'], pal.selected, '#ffffff'] },
+  })
+  map.addLayer({
     id: 'selected', type: 'circle', source: 'selected',
     paint: {
       'circle-color': pal.selected, 'circle-radius': 9,
@@ -68,11 +83,11 @@ function addLayers(map, { buildings, validation, breaks, theme }) {
   })
 }
 
-export default function MapView({ buildings, validation, breaks, theme, layer, selected, onBuilding }) {
+export default function MapView({ buildings, validation, breaks, theme, layer, selected, onBuilding, recs = [], onRec }) {
   const ref = useRef(null)
   const mapRef = useRef(null)
   const state = useRef({})
-  state.current = { buildings, validation, breaks, theme, layer, selected, onBuilding }
+  state.current = { buildings, validation, breaks, theme, layer, selected, onBuilding, recs, onRec }
 
   useEffect(() => {
     const map = new maplibregl.Map({
@@ -88,7 +103,15 @@ export default function MapView({ buildings, validation, breaks, theme, layer, s
       addLayers(map, state.current)
       applyLayer(map, state.current.layer)
       applySelected(map, state.current.selected)
+      applyRecs(map, state.current.recs, false)
     })
+    map.on('click', 'recs', (e) => state.current.onRec?.(e.features[0].properties.i))
+    map.on('mousemove', 'recs', (e) => {
+      const p = e.features[0].properties
+      map.getCanvas().style.cursor = 'pointer'
+      popup.setLngLat(e.lngLat).setHTML(`<strong>${p.rank}. ${p.address}</strong><br>${p.suburb}<br>ValuIQ value <strong>${moneyShort(p.value)}</strong>${p.stretch ? '<br>Just above budget' : ''}`).addTo(map)
+    })
+    map.on('mouseleave', 'recs', () => { map.getCanvas().style.cursor = ''; popup.remove() })
     map.on('mousemove', 'buildings', (e) => {
       const f = e.features[0]
       if (hovered !== null) map.setFeatureState({ source: 'buildings', id: hovered }, { hover: false })
@@ -126,6 +149,8 @@ export default function MapView({ buildings, validation, breaks, theme, layer, s
 
   useEffect(() => { const m = mapRef.current; if (m && m.getLayer('buildings')) applyLayer(m, layer) }, [layer])
 
+  useEffect(() => { const m = mapRef.current; if (m && m.getSource('recs')) applyRecs(m, recs, true) }, [recs])
+
   useEffect(() => {
     const m = mapRef.current
     if (!m) return
@@ -138,8 +163,23 @@ export default function MapView({ buildings, validation, breaks, theme, layer, s
 }
 
 function applyLayer(map, layer) {
-  map.setLayoutProperty('buildings', 'visibility', layer === 'values' ? 'visible' : 'none')
+  map.setLayoutProperty('buildings', 'visibility', layer === 'accuracy' ? 'none' : 'visible')
+  map.setPaintProperty('buildings', 'circle-opacity', layer === 'ask' ? 0.18 : 0.92)
+  map.setPaintProperty('buildings', 'circle-stroke-opacity', layer === 'ask' ? 0.18 : 1)
   map.setLayoutProperty('validation', 'visibility', layer === 'accuracy' ? 'visible' : 'none')
+  for (const id of ['recs', 'recs-label']) map.setLayoutProperty(id, 'visibility', layer === 'ask' ? 'visible' : 'none')
+}
+
+function applyRecs(map, recs, fit) {
+  map.getSource('recs').setData({
+    type: 'FeatureCollection',
+    features: recs.slice().reverse().map((r) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lng, r.lat] }, properties: r })),
+  })
+  if (fit && recs.length) {
+    const b = new maplibregl.LngLatBounds()
+    recs.forEach((r) => b.extend([r.lng, r.lat]))
+    map.fitBounds(b, { padding: 80, maxZoom: 16, duration: 900 })
+  }
 }
 
 function applySelected(map, sel) {

@@ -25,7 +25,8 @@ ValuIQ estimates the 31 August 2026 sale value of all 181,711 supplied unit-styl
 | Chronological validation (3 rolling 2-month folds, scored on confirmed flat sales) | `src/validation/run_validation.py` |
 | Final 5-seed LightGBM and submission CSV, with built-in format checks | `src/predict.py` |
 | Report with maps and charts | `src/report/build_report.py` → `report.html` |
-| Interactive web app: value map, address lookup, accuracy map (React + MapLibre) | `app/`, data from `src/demo/export_app_data.py` |
+| Interactive web app: value map, address lookup, accuracy map and the "Ask ValuIQ" recommendation assistant (React + MapLibre) | `app/`, data from `src/demo/export_app_data.py` |
+| Current suburb lifestyle data for the assistant (crime, livability, income, rent) | `src/preprocessing/fetch_lifestyle.py` |
 
 ## How to run
 
@@ -40,6 +41,7 @@ python -m src.preprocessing.fetch_osm
 python -m src.validation.run_validation     # prints fold results and writes outputs/
 python -m src.predict                       # writes and checks valuation_valuiq.csv
 python -m src.report.build_report           # writes report.html
+python -m src.preprocessing.fetch_lifestyle  # suburb crime/livability/income/rent for the assistant
 python -m src.demo.export_app_data          # writes app/public/data/ (git-ignored)
 cd app && npm install && npm run dev        # web app at http://localhost:5173
 ```
@@ -53,7 +55,7 @@ cd app && npm install && npm run dev        # web app at http://localhost:5173
 ## Data sources and licences
 
 - **Microburbs supplied task files:** input addresses, confirmed flat sales, repeat-sale pairs, and mesh-block homes and people 2021–2026. Used on the day under the hackathon terms and not included in this repository. The 2026 block figures are Microburbs estimates, not Census results.
-- **Microburbs Hackathon API:** unit sales up to 31 Aug 2026, used under the hackathon terms. No API output is included in this repository.
+- **Microburbs Hackathon API:** unit sales up to 31 Aug 2026 (valuation), plus current suburb crime, livability, income and rent indicators (used only by the web app's recommendation assistant, never as valuation features). Used under the hackathon terms. No API output is included in this repository.
 - **Addresses:** Open G-NAF, © Geoscape Australia, licensed by the Commonwealth of Australia under the Open G-NAF End User Licence Agreement (attribution and mailing restriction).
 - **2021 mesh blocks and Census counts:** ABS, © Commonwealth of Australia, CC BY 4.0.
 - **Stations, parks, water and major roads:** © OpenStreetMap contributors, Open Database Licence (ODbL), via the Overpass API.

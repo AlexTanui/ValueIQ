@@ -12,19 +12,12 @@ function Stat({ k, v, d, good }) {
   )
 }
 
-export function Overview({ summary, layer, setLayer, theme }) {
+export function Overview({ summary, layer, theme }) {
   const h = summary.headline
   const pal = PALETTE[theme]
   const best = 109 / 227
   return (
     <>
-      <div className="seg" role="tablist" aria-label="Map layer">
-        <button role="tab" aria-selected={layer === 'values'} className={layer === 'values' ? 'on' : ''}
-          onClick={() => setLayer('values')}>Predicted values</button>
-        <button role="tab" aria-selected={layer === 'accuracy'} className={layer === 'accuracy' ? 'on' : ''}
-          onClick={() => setLayer('accuracy')}>Model accuracy</button>
-      </div>
-
       {layer === 'values' ? (
         <section>
           <p className="lede">Each dot is a building, coloured by the median value of its units and sized by unit count. Click a building or search for an address.</p>
