@@ -9,6 +9,7 @@ added back afterwards.
 import numpy as np
 import pandas as pd
 
+from src.features.location import LOCATION_FEATURES
 from src.models.price_index import index_at
 
 GRID_DEG = 0.0025  # ~250 m cells
@@ -28,7 +29,7 @@ NUMERIC = [
     "bedrooms", "bathrooms", "car_spaces", "flats_in_building", "floor_est", "unit_no",
     "lat", "lng", "dist_cbd_km", "is_commercial", "is_carspace", "bld_age_years",
     "own_last_adj", "own_years_since", "bld_last_adj", "bld_years_since",
-]
+] + LOCATION_FEATURES
 for _g in GROUP_KEYS:
     NUMERIC += [f"{_g}_mean", f"{_g}_n"]
 FEATURES = NUMERIC + CATEGORICAL

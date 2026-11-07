@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ValuIQ Valuation Report</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --bench: #c3c2b7; --good-text: #006300;
+  --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95; --seq-7: #0d366b;
+  --div-neg-2: #1c5cab; --div-neg-1: #86b6ef; --div-mid: #d6d5ce; --div-pos-1: #f0a3a2; --div-pos-2: #c42e2e;
+  --tiles: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --bench: #5a5955; --good-text: #0ca30c;
+    --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #86b6ef; --seq-7: #cde2fb;
+    --div-neg-2: #5598e7; --div-neg-1: #1c5cab; --div-mid: #4a4a46; --div-pos-1: #9c2f2f; --div-pos-2: #e66767;
+    --tiles: dark;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --bench: #5a5955; --good-text: #0ca30c;
+  --seq-1: #104281; --seq-2: #184f95; --seq-3: #256abf; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #86b6ef; --seq-7: #cde2fb;
+  --div-neg-2: #5598e7; --div-neg-1: #1c5cab; --div-mid: #4a4a46; --div-pos-1: #9c2f2f; --div-pos-2: #e66767;
+  --tiles: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+h2 { font-size: 1.35rem; margin: 48px 0 8px; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+p, li { color: var(--ink-2); max-width: 74ch; }
+strong { color: var(--ink); }
+.sub { color: var(--ink-2); margin: 0 0 24px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 16px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 24px 0; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.tile .k { font-size: 0.85rem; color: var(--ink-2); }
+.tile .v { font-size: 2rem; font-weight: 650; letter-spacing: -0.02em; margin: 2px 0; }
+.tile .d { font-size: 0.85rem; color: var(--muted); }
+.tile .d.good { color: var(--good-text); }
+.map { height: 520px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 0.85rem; color: var(--ink-2); margin-top: 12px; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--border); }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--ink-2); font-size: 12px; font-family: inherit; }
+.chart .tick { fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .base { stroke: var(--axis); stroke-width: 1; }
+.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; box-shadow: 0 4px 16px rgba(0,0,0,0.12); opacity: 0; transition: opacity .1s; z-index: 1000; max-width: 280px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 220px; }
+th { color: var(--ink-2); font-weight: 600; }
+tr.ours td { color: var(--ink); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } .map { height: 400px; } }
+code { font-size: 0.88em; background: var(--grid); padding: 1px 5px; border-radius: 4px; }
+.note { font-size: 0.85rem; color: var(--muted); }
+.leaflet-container { background: var(--surface); font: inherit; }
+.leaflet-tile-pane { filter: grayscale(1) contrast(0.9) brightness(1.04); opacity: 0.75; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(0.85) contrast(0.9); opacity: 0.6; } }
+:root[data-theme="dark"] .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(0.85) contrast(0.9); opacity: 0.6; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+<h1>ValuIQ: valuing every flat in the City of Sydney</h1>
+<p class="sub">Intelligent Property Valuation Through Data. Microburbs Hackathon, Task 5 (Value Every Flat). Valuation date 31 August 2026.</p>
+
+<div class="tiles" id="tiles"></div>
+
+<p>ValuIQ estimates the 31 August 2026 sale value of every unit-style address in the City of Sydney. It values each flat from its own building's sales history, brought forward with a repeat-sales price index, and then adjusts for the unit's characteristics and location. Everything is built only from sales dated on or before the valuation date.</p>
+
+<h2>1. Predicted values across the city</h2>
+<p>Each dot is one residential building, coloured by the median predicted value of its units and sized by the number of units. Click a building for details.</p>
+<div class="card">
+  <div id="map-values" class="map" role="img" aria-label="Map of median predicted unit value per building"></div>
+  <div class="legend" id="legend-values"></div>
+</div>
+
+<h2>2. Held-out validation</h2>
+<p>We used a chronological split that mirrors the competition. The model, price index and every feature were built only from sales <strong>before 1 July 2026</strong>. They were then scored on unit sales from <strong>1 July to 31 August 2026</strong>, which is the same 0–2 month horizon as the judging sales. Because the judging set uses flats under $1.2 million, the headline metric uses that subset.</p>
+
+<div class="card chart">
+  <h3 style="margin-top:0">Share of sales valued within 10%</h3>
+  <p class="note" style="margin-top:0">ValuIQ results: July–August 2026 holdout, sales under $1.2M (<span data-fact="n_val_u12"></span> sales). Organiser results are from the task brief and were measured on 227 private sales from September to November 2026, so the two sets of numbers are indicative rather than a like-for-like comparison.</p>
+  <div id="chart-compare"></div>
+</div>
+
+<div class="card scroll">
+  <h3 style="margin-top:0">Metrics, July–August 2026 holdout</h3>
+  <table id="metrics-table"></table>
+  <p class="note">Error metrics are for sales under $1.2M. R² is shown for both the under-$1.2M subset and all sales. Missing = sales with no prediction (counted as wrong). Fold columns give within-10% for each 2-month fold, each with its own cutoff, as a stability check.</p>
+</div>
+
+<h3>Where the model is accurate</h3>
+<p>Each validation sale is coloured by its valuation error, shown as a percentage only. Grey means within 10%. Blue means we valued below the sale price, and red means above it.</p>
+<div class="card">
+  <div id="map-errors" class="map" role="img" aria-label="Map of validation errors"></div>
+  <div class="legend" id="legend-errors"></div>
+</div>
+
+<h2>3. The market: a repeat-sales price index</h2>
+<p>We matched consecutive sales of the same flat, 66,000+ pairs, and solved a quarterly Bailey–Muth–Nourse index with light smoothing. The index puts every historical sale on the same price footing, and it brings each flat's last sale forward to 31 August 2026. The index is rebuilt inside every validation fold from pre-cutoff sales only.</p>
+<div class="card chart">
+  <h3 style="margin-top:0">City of Sydney unit price index (31 Aug 2026 quarter = 1.00)</h3>
+  <div id="chart-index"></div>
+</div>
+
+<h2>4. Method</h2>
+<h3>Data and cleaning</h3>
+<ul>
+  <li><strong>Addresses:</strong> <span data-fact="n_props"></span> addresses from the Microburbs API across 29 suburbs. Of these, <span data-fact="n_units"></span> are unit-type addresses in <span data-fact="n_buildings"></span> buildings. Every address gets a value.</li>
+  <li><strong>Sales:</strong> all unit sales from 1990 to 31 August 2026. We requested them with <code>to_date=2026-08-31</code>, so later sales were never downloaded, and we filtered them again after loading.</li>
+  <li><strong>Bulk sales removed:</strong> whole-building or en-bloc transactions appear as the same price on the same day against many units, some above $600 million. Any price, date and location repeated across 3 or more units was dropped. Prices outside $100k–$20M were also dropped. <span data-fact="n_sales_clean"></span> clean unit sales remain.</li>
+  <li><strong>Buildings:</strong> each address was split into a unit part and a street part, so <code>12/34 RALPH ST</code> belongs to building <code>34 RALPH ST</code>. Floor comes from the API's level field where present, otherwise from hundreds-style unit numbers (1205 → floor 12) in buildings with 20 or more flats.</li>
+  <li><strong>Missing data:</strong> missing bedrooms, bathrooms and parking are kept as missing, never treated as zero. LightGBM learns from the missingness directly.</li>
+</ul>
+
+<h3>Features, all point-in-time</h3>
+<p>Each sale price is converted to an <em>index-adjusted</em> log price. Then, for every row, we summarise only the sales dated <strong>strictly before</strong> that row's information date. This applies to training rows too, so a 2018 sale only sees pre-2018 evidence. The features are:</p>
+<ul>
+  <li>the flat's own last sale (index-adjusted) and how long ago it was</li>
+  <li>building averages: all units, units with the same bedroom count, and the most recent sale in the building</li>
+  <li>mesh-block, 250 m grid-cell, suburb, and suburb × bedroom averages, each with its sale count</li>
+  <li>unit attributes: bedrooms, bathrooms, parking, flats in building, floor, unit number, dwelling type, and commercial or car-space flags</li>
+  <li>building age, using the first recorded sale as a proxy</li>
+  <li>location from OpenStreetMap: distance to the nearest train, metro or light-rail station, stations within 800 m, and distance to the harbour or water, parks and major roads</li>
+</ul>
+<div class="card chart">
+  <h3 style="margin-top:0">What drives the model (share of LightGBM gain, top 12)</h3>
+  <div id="chart-importance"></div>
+</div>
+
+<h3>The key step: value the building, then the unit</h3>
+<p>Most flats have not sold recently, but their building usually has. ValuIQ treats the building as the main unit of evidence. Every past sale in the building is brought to today's prices with the repeat-sales index and grouped by bedroom count. LightGBM then learns how much to trust this building evidence compared with the flat's own last sale, the neighbourhood, and the unit's own attributes. The building × bedroom average alone is the single most important feature.</p>
+
+<h3>Model</h3>
+<p>The model is LightGBM with a Huber loss on index-adjusted log price, so a few extreme sales can't dominate the fit. It uses 1,500 rounds, and sales from the last 3 years get double weight. To produce a value, we add back the index level at the valuation quarter and take the exponential.</p>
+
+<h2>5. What worked and what did not</h2>
+<ul>
+  <li><strong>Worked:</strong> point-in-time building × bedroom evidence was the biggest gain. LightGBM was stable across the three 2-month folds, with a mean within-10% of <span data-fact="fold_mean"></span>. OpenStreetMap location features added a small improvement.</li>
+  <li><strong>Did not work:</strong> CatBoost with the same features was unstable, and some of its predictions blew up in one fold. A 50/50 blend with LightGBM was worse than LightGBM alone, so both were dropped. Simple last-sale indexing was capped at around 46% because many flats have no recent sale of their own.</li>
+</ul>
+
+<h2>6. Limitations</h2>
+<ul>
+  <li>The supplied input file was not received, so the ID set comes from the Microburbs API's unit addresses. Running <code>src/predict.py</code> with the official input file restricts the output to exactly those IDs.</li>
+  <li>The bedroom, bathroom and parking values from the API reflect each address's most recent advert, and their source dates are not exposed. Validation uses the bedroom count recorded on each sale.</li>
+  <li>The holdout has a few hundred sales, so differences of about 2–3 points between models are within sampling noise.</li>
+  <li>Houses, shops and offices are valued with the same unit model and are likely less accurate. They are not part of the flat judging set.</li>
+</ul>
+
+<h2>7. Data provenance and licences</h2>
+<ul>
+  <li><strong>Microburbs Hackathon API</strong> (property, sales and suburb data), used under the hackathon terms. No raw API output is published here. This report shows only model outputs and aggregates.</li>
+  <li><strong>Addresses:</strong> Open G-NAF © Geoscape Australia, licensed by the Commonwealth of Australia (attribution and mailing restriction).</li>
+  <li><strong>Mesh blocks:</strong> ABS 2021, © Commonwealth of Australia, CC BY 4.0.</li>
+  <li><strong>Stations, parks, water and roads:</strong> © OpenStreetMap contributors, ODbL, via the Overpass API.</li>
+  <li><strong>Base maps:</strong> OpenStreetMap standard tiles, © OpenStreetMap contributors.</li>
+</ul>
+<p class="note">Valuation date 31 August 2026. No information dated after that date was used in training, in features, or in the price index.</p>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pct = v => (v * 100).toFixed(1) + '%';
+const money = v => '$' + Math.round(v).toLocaleString('en-AU');
+const moneyK = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : '$' + Math.round(v / 1e3) + 'k';
+const F = DATA.facts;
+const tip = document.getElementById('tip');
+function showTip(e, html) { tip.innerHTML = html; tip.style.opacity = 1;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip() { tip.style.opacity = 0; }
+
+// Facts and tiles
+const factFmt = { n_props: v => v.toLocaleString('en-AU'), n_units: v => v.toLocaleString('en-AU'),
+  n_buildings: v => v.toLocaleString('en-AU'), n_sales_clean: v => v.toLocaleString('en-AU'),
+  n_val_u12: v => v.toLocaleString('en-AU'), fold_mean: pct };
+document.querySelectorAll('[data-fact]').forEach(el => { const k = el.dataset.fact; el.textContent = (factFmt[k] || String)(F[k]); });
+document.getElementById('tiles').innerHTML = [
+  ['Within 10% (holdout, &lt;$1.2M)', pct(F.headline), `+${((F.headline - F.best_benchmark) * 100).toFixed(0)} pts on best organiser result (${pct(F.best_benchmark)})`, 'good'],
+  ['Median absolute error', moneyK(F.mdae), 'Holdout sales under $1.2M', ''],
+  ['R² (held-out, all sales)', F.r2_all.toFixed(2), `${F.n_val.toLocaleString('en-AU')} July–August 2026 sales`, ''],
+  ['Addresses valued', F.n_props.toLocaleString('en-AU'), 'Missing predictions: 0', ''],
+].map(([k, v, d, c]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d ${c}">${d}</div></div>`).join('');
+
+// Maps
+function tileLayer() {
+  return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 });
+}
+function baseMap(id) {
+  const m = L.map(id, { preferCanvas: true, scrollWheelZoom: false }).setView([-33.886, 151.205], 13);
+  tileLayer().addTo(m); return m;
+}
+// Building values: 7 quantile bins on the sequential blue ramp
+(function () {
+  const b = DATA.buildings, vals = b.map(r => r[2]).sort((x, y) => x - y);
+  const q = [1, 2, 3, 4, 5, 6].map(i => vals[Math.floor(vals.length * i / 7)]);
+  const bin = v => q.findIndex(t => v < t) === -1 ? 6 : q.findIndex(t => v < t);
+  const colors = [1, 2, 3, 4, 5, 6, 7].map(i => css('--seq-' + i));
+  const m = baseMap('map-values'), ring = css('--surface');
+  b.forEach(([lat, lng, v, n, sub, age, fl]) => {
+    L.circleMarker([lat, lng], { radius: Math.max(3, Math.min(11, 2 + Math.sqrt(n) * 0.7)), color: ring, weight: 1,
+      fillColor: colors[bin(v)], fillOpacity: 0.9 })
+      .bindPopup(`<strong>${sub}</strong><br>Median unit value: <strong>${money(v)}</strong><br>${n} units` +
+        (fl ? `<br>Up to floor ${fl}` : '') + (age != null ? `<br>First recorded sale ~${age} yrs ago` : ''))
+      .addTo(m);
+  });
+  const edges = [vals[0], ...q, vals[vals.length - 1]];
+  document.getElementById('legend-values').innerHTML = colors.map((c, i) =>
+    `<span><span class="sw" style="background:${c}"></span>${moneyK(edges[i])}–${moneyK(edges[i + 1])}</span>`).join('');
+})();
+// Validation errors: diverging, grey = within 10%
+(function () {
+  const bins = [[-Infinity, -20, '--div-neg-2', 'Under by >20%'], [-20, -10, '--div-neg-1', 'Under by 10–20%'],
+    [-10, 10.0001, '--div-mid', 'Within 10%'], [10.0001, 20, '--div-pos-1', 'Over by 10–20%'], [20, Infinity, '--div-pos-2', 'Over by >20%']];
+  const m = baseMap('map-errors'), ring = css('--surface');
+  const counts = bins.map(() => 0);
+  DATA.validation.forEach(([lat, lng, e, bd]) => {
+    const i = bins.findIndex(([lo, hi]) => e >= lo && e < hi); counts[i]++;
+    L.circleMarker([lat, lng], { radius: 5, color: ring, weight: 1, fillColor: css(bins[i][2]), fillOpacity: 0.95 })
+      .bindPopup(`Error: <strong>${e > 0 ? '+' : ''}${e.toFixed(1)}%</strong>` + (bd != null ? `<br>${bd} bedroom${bd === 1 ? '' : 's'}` : ''))
+      .addTo(m);
+  });
+  document.getElementById('legend-errors').innerHTML = bins.map(([, , c, l], i) =>
+    `<span><span class="sw" style="background:var(${c})"></span>${l} (${counts[i]})</span>`).join('');
+})();
+
+// SVG helpers
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+// Horizontal bar chart
+function hbar(id, rows, fmt, opts = {}) {
+  const host = document.getElementById(id), W = 760, rowH = 30, labelW = opts.labelW || 300, padR = 64;
+  const H = rows.length * rowH + 28, max = opts.max || Math.max(...rows.map(r => r.value));
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || '' }, host);
+  const x = v => labelW + (W - labelW - padR) * v / max;
+  (opts.ticks || []).forEach(t => { el('line', { x1: x(t), x2: x(t), y1: 0, y2: H - 22, class: 'grid' }, svg);
+    el('text', { x: x(t), y: H - 6, 'text-anchor': 'middle', class: 'tick' }, svg).textContent = fmt(t); });
+  rows.forEach((r, i) => {
+    const y = i * rowH + 4, h = rowH - 10, fill = r.ours ? css('--series-1') : css('--bench');
+    const t = el('text', { x: labelW - 10, y: y + h / 2 + 4, 'text-anchor': 'end' }, svg); t.textContent = r.label;
+    if (r.ours) t.setAttribute('style', `fill:${css('--ink')};font-weight:600`);
+    const w = Math.max(2, x(r.value) - labelW);
+    el('path', { d: `M${labelW},${y} h${w - 4} a4,4 0 0 1 4,4 v${h - 8} a4,4 0 0 1 -4,4 h${-(w - 4)} z`, fill }, svg);
+    el('text', { x: x(r.value) + 6, y: y + h / 2 + 4, class: 'tick' }, svg).textContent = fmt(r.value);
+    const hit = el('rect', { x: 0, y: y - 4, width: W, height: rowH, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', e => showTip(e, `<strong>${r.label}</strong><br>${fmt(r.value)}` + (r.organiser ? '<br><span style="opacity:.7">Organiser figure, Sept–Nov 2026 sales</span>' : '')));
+    hit.addEventListener('mouseleave', hideTip);
+  });
+  el('line', { x1: labelW, x2: labelW, y1: 0, y2: H - 22, class: 'base' }, svg);
+}
+hbar('chart-compare', DATA.comparison, pct, { max: 0.8, ticks: [0, 0.2, 0.4, 0.6, 0.8], aria: 'Within-10% accuracy by method' });
+hbar('chart-importance', DATA.importance.slice().reverse().map((r, i, a) => ({ ...r, ours: i === a.length - 1 })), pct,
+  { labelW: 170, aria: 'Feature importance' });
+
+// Metrics table
+(function () {
+  const t = document.getElementById('metrics-table');
+  t.innerHTML = `<thead><tr><th>Model</th><th>Within 10%</th><th>Median abs. error</th><th>MAE</th><th>RMSE</th><th>R² (&lt;$1.2M)</th><th>R² (all)</th><th>Missing</th>${DATA.folds.map(f => `<th>${f.slice(0, 7)} fold</th>`).join('')}</tr></thead><tbody>` +
+    DATA.metrics.map(r => `<tr class="${r.model.startsWith('ValuIQ') ? 'ours' : ''}"><td>${r.model}</td><td>${pct(r.within)}</td><td>${money(r.mdae)}</td><td>${money(r.mae)}</td><td>${money(r.rmse)}</td><td>${r.r2_u12.toFixed(3)}</td><td>${r.r2_all.toFixed(3)}</td><td>${r.missing}</td>${r.folds.map(v => `<td>${pct(v)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+})();
+
+// Index line chart with crosshair
+(function () {
+  const host = document.getElementById('chart-index'), { labels, values } = DATA.index;
+  const W = 760, H = 300, L0 = 44, R0 = 16, T0 = 12, B0 = 28;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Quarterly unit price index' }, host);
+  const max = Math.ceil(Math.max(...values) * 10) / 10, min = Math.floor(Math.min(...values) * 10) / 10;
+  const x = i => L0 + (W - L0 - R0) * i / (values.length - 1), y = v => T0 + (H - T0 - B0) * (1 - (v - min) / (max - min));
+  for (let v = min; v <= max + 1e-9; v += 0.2) { el('line', { x1: L0, x2: W - R0, y1: y(v), y2: y(v), class: 'grid' }, svg);
+    el('text', { x: L0 - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'tick' }, svg).textContent = v.toFixed(1); }
+  labels.forEach((l, i) => { if (l.endsWith('Q1') && +l.slice(0, 4) % 3 === 2)
+    el('text', { x: x(i), y: H - 8, 'text-anchor': 'middle', class: 'tick' }, svg).textContent = l.slice(0, 4); });
+  el('line', { x1: L0, x2: W - R0, y1: H - B0, y2: H - B0, class: 'base' }, svg);
+  el('path', { d: values.map((v, i) => (i ? 'L' : 'M') + x(i) + ',' + y(v)).join(''), fill: 'none', stroke: css('--series-1'), 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  const n = values.length - 1;
+  el('circle', { cx: x(n), cy: y(values[n]), r: 4, fill: css('--series-1'), stroke: css('--surface'), 'stroke-width': 2 }, svg);
+  el('text', { x: x(n) - 8, y: y(values[n]) + 22, 'text-anchor': 'end' }, svg).textContent = `${labels[n]}: 1.00`;
+  const cross = el('line', { y1: T0, y2: H - B0, stroke: css('--axis'), 'stroke-width': 1, visibility: 'hidden' }, svg);
+  const dot = el('circle', { r: 4, fill: css('--series-1'), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden' }, svg);
+  const hit = el('rect', { x: L0, y: T0, width: W - L0 - R0, height: H - T0 - B0, fill: 'transparent' }, svg);
+  hit.addEventListener('mousemove', e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(n, Math.round((px - L0) / (W - L0 - R0) * n)));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(values[i])); dot.setAttribute('visibility', 'visible');
+    showTip(e, `<strong>${labels[i]}</strong><br>Index ${values[i].toFixed(3)}<br>${((1 / values[i] - 1) * 100).toFixed(0)}% change to Aug 2026`);
+  });
+  hit.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); hideTip(); });
+})();
+</script>
+</body>
+</html>

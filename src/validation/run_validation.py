@@ -1,8 +1,10 @@
-"""Chronological validation: information cutoff SPLIT_DATE, validate on unit
-sales from SPLIT_DATE to the valuation date.
+"""Chronological validation over rolling 2-month folds.
 
-Mirrors the competition: features and index use only sales before the cutoff,
-and the target sales happen 0-2 months after it.
+For each fold the information cutoff is the fold start: the index, training
+set and features use only sales before it, and the model is scored on unit
+sales in the following two months. This mirrors the competition, where values
+at 31 August 2026 are scored on sales 0-2 months later. The final fold
+(cutoff 1 July 2026, scored on July-August) is the headline result.
 """
 import json
 from pathlib import Path
@@ -13,10 +15,10 @@ import pandas as pd
 
 from src.features.feature_engineering import FEATURES, build_features
 from src.models.price_index import build_index, index_at
-from src.preprocessing.clean_data import VALUATION_DATE, load_properties, load_sales
+from src.preprocessing.clean_data import load_properties, load_sales
 from src.validation.evaluate import metrics
 
-SPLIT_DATE = pd.Timestamp("2026-07-01")
+FOLDS = [("2026-03-01", "2026-04-30"), ("2026-05-01", "2026-06-30"), ("2026-07-01", "2026-08-31")]
 TRAIN_FROM = pd.Timestamp("2010-01-01")
 OUT_DIR = Path(__file__).resolve().parents[2] / "outputs"
 
@@ -35,57 +37,85 @@ def training_frame(sales, cutoff, index):
     return X
 
 
+def _recency_weight(X):
+    return np.where(X["sold_date"] >= X["sold_date"].max() - pd.Timedelta(days=3 * 365), 2.0, 1.0)
+
+
 def fit_lgb(X):
-    w = np.where(X["sold_date"] >= X["sold_date"].max() - pd.Timedelta(days=3 * 365), 2.0, 1.0)
-    ds = lgb.Dataset(X[FEATURES], X["target"], weight=w, categorical_feature="auto")
+    ds = lgb.Dataset(X[FEATURES], X["target"], weight=_recency_weight(X), categorical_feature="auto")
     return lgb.train(LGB_PARAMS, ds, num_boost_round=N_ROUNDS)
 
 
-def baseline_predictions(V, level):
-    """Simple fallback chains in adjusted-log space, plus the index level."""
+def predict_adj(model, X):
+    """LightGBM prediction in adjusted-log space.
+
+    CatBoost and a 50/50 blend were tested on the same folds and were worse
+    and unstable (mean within-10% 38.8% and 45.8% vs 63.5%), so they were dropped.
+    """
+    return {"lightgbm": model.predict(X[FEATURES])}
+
+
+def baseline_adj(V):
+    """Simple fallback chains in adjusted-log space."""
     sub_bed = V["subbed_mean"].fillna(V["sub_mean"])
     bld_bed = V["bldbed_mean"].where(V["bldbed_n"] >= 2).fillna(sub_bed)
-    last_sale = V["own_last_adj"].fillna(bld_bed)
     return {
-        "suburb_bedroom_median": np.exp(sub_bed + level),
-        "building_bedroom_mean": np.exp(bld_bed + level),
-        "last_sale_indexed": np.exp(last_sale + level),
+        "suburb_bedroom_median": sub_bed.to_numpy(),
+        "building_bedroom_mean": bld_bed.to_numpy(),
+        "last_sale_indexed": V["own_last_adj"].fillna(bld_bed).to_numpy(),
     }
+
+
+def run_fold(sales, start, end):
+    cutoff, end = pd.Timestamp(start), pd.Timestamp(end)
+    index = build_index(sales, cutoff)
+    level = index.iloc[-1]
+    history = sales[sales["sold_date"] < cutoff]
+
+    X = training_frame(sales, cutoff, index)
+    val = sales[(sales["sold_date"] >= cutoff) & (sales["sold_date"] <= end)].copy()
+    val["info_date"] = cutoff
+    V = build_features(val, history, index)
+
+    model = fit_lgb(X)
+    adj = {**baseline_adj(V), **predict_adj(model, V)}
+    preds = {k: np.exp(v + level) for k, v in adj.items()}
+    return X, V, preds, model
 
 
 def main():
     props = load_properties()
     sales = load_sales(props)
-    index = build_index(sales, SPLIT_DATE)
-    level = index.iloc[-1]
+    summary, frames = [], []
+    for start, end in FOLDS:
+        X, V, preds, model = run_fold(sales, start, end)
+        actual = V["sold_price"].to_numpy()
+        under = actual < 1_200_000
+        for name, p in preds.items():
+            summary.append({"fold": start, "model": name, "n_train": len(X), "n_val": len(V),
+                            "n_val_under_1.2m": int(under.sum()),
+                            **{f"all_{k}": v for k, v in metrics(actual, p).items()},
+                            **{f"u12_{k}": v for k, v in metrics(actual[under], p[under]).items()}})
+        frames.append(V.assign(fold=start, **{f"pred_{k}": v for k, v in preds.items()}))
+        print(f"fold {start}: train={len(X):,} val={len(V):,} (<1.2M {under.sum()})", flush=True)
 
-    X = training_frame(sales, SPLIT_DATE, index)
-    val = sales[(sales["sold_date"] >= SPLIT_DATE) & (sales["sold_date"] <= VALUATION_DATE)].copy()
-    val["info_date"] = SPLIT_DATE
-    V = build_features(val, sales[sales["sold_date"] < SPLIT_DATE], index)
+    S = pd.DataFrame(summary)
+    table = S.pivot(index="model", columns="fold", values="u12_within_10pct")
+    table["mean"] = table.mean(axis=1)
+    print("\nWithin 10% (sales under $1.2M) by fold:")
+    print((table * 100).round(1).sort_values("mean").to_string())
+    last = S[S["fold"] == FOLDS[-1][0]].set_index("model")
+    print(f"\nHeadline fold {FOLDS[-1][0]} (sales under $1.2M):")
+    print(last[["u12_within_10pct", "u12_median_abs_error", "u12_mae", "u12_rmse", "u12_r2",
+                "all_within_10pct", "all_r2"]].round(3).to_string())
 
-    model = fit_lgb(X)
-    preds = baseline_predictions(V, level)
-    preds["lightgbm"] = np.exp(model.predict(V[FEATURES]) + level)
-
-    actual = V["sold_price"].to_numpy()
-    under = actual < 1_200_000
-    results = {}
-    for name, p in preds.items():
-        results[name] = {"all": metrics(actual, p), "under_1.2m": metrics(actual[under], np.asarray(p)[under])}
-        r, u = results[name]["all"], results[name]["under_1.2m"]
-        print(f"{name:24s} within10 all={r['within_10pct']:.1%} (<1.2M {u['within_10pct']:.1%})  "
-              f"MdAE={u['median_abs_error']:,.0f}  R2={r['r2']:.3f}")
-
-    print(f"\nsplit={SPLIT_DATE.date()} train={len(X):,} validation={len(V):,} (<1.2M {under.sum()})")
     imp = pd.Series(model.feature_importance("gain"), index=FEATURES).sort_values(ascending=False)
-    print(imp.head(15).round(0).to_string())
-
     OUT_DIR.mkdir(exist_ok=True)
+    S.to_csv(OUT_DIR / "validation_summary.csv", index=False)
+    imp.to_csv(OUT_DIR / "feature_importance.csv", header=["gain"])
+    pd.concat(frames).to_parquet(OUT_DIR / "validation_predictions.parquet")
     (OUT_DIR / "validation_results.json").write_text(json.dumps(
-        {"split_date": str(SPLIT_DATE.date()), "n_train": len(X), "n_validation": len(V),
-         "n_validation_under_1.2m": int(under.sum()), "results": results}, indent=2))
-    V.assign(**{f"pred_{k}": v for k, v in preds.items()}).to_parquet(OUT_DIR / "validation_predictions.parquet")
+        {"folds": FOLDS, "headline": last.reset_index().to_dict(orient="records")}, indent=2, default=float))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.features.location import LOCATION_FEATURES, add_location_features
+
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 VALUATION_DATE = pd.Timestamp("2026-08-31")
 CBD = (-33.8675, 151.2070)  # Martin Place
@@ -58,7 +60,8 @@ def load_properties(units_only=True):
         ["commercial", "industrial"])
     p["is_carspace"] = addr.str.contains(r"\b(?:CARSPACE|CAR SPACE|PARKING)\b")
     p["dist_cbd_km"] = _haversine_km(p["lat"], p["lng"], *CBD)
-    return p.reset_index(drop=True)
+    p = add_location_features(p.reset_index(drop=True))
+    return p
 
 
 def load_sales(properties):
@@ -71,7 +74,7 @@ def load_sales(properties):
     s = s[s["sold_price"].between(MIN_PRICE, MAX_PRICE)]
 
     keep = ["gnaf_pid", "building_key", "addr_prefix", "unit_no", "floor_est", "flats_in_building",
-            "mb", "api_suburb", "dwelling_type", "is_commercial", "is_carspace", "dist_cbd_km"]
+            "mb", "api_suburb", "dwelling_type", "is_commercial", "is_carspace", "dist_cbd_km"] + LOCATION_FEATURES
     s = s.drop(columns=["api_suburb"]).merge(properties[keep], on="gnaf_pid", how="inner")
     s = s.sort_values("sold_date").reset_index(drop=True)
     s["log_price"] = np.log(s["sold_price"])
