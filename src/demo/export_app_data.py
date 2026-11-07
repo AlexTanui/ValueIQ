@@ -107,7 +107,13 @@ def main():
     comparison = [{"label": MODEL_LABELS[m], "value": float(last.loc[m, "u12_within_10pct"]),
                    "ours": m == "lightgbm_seed_avg"} for m in MODEL_LABELS]
     comparison += [{"label": l, "value": v, "ours": False, "organiser": True} for l, v in BENCHMARKS]
+    # Long-run growth from our own index (sales up to 31 Aug 2026), for the 2-5 year scenario
+    annual = np.exp(index.diff(4).dropna())  # year-on-year growth factors, quarterly steps
+    last10 = annual[annual.index > index.index[-1] - 40]
+    growth = {"cagr_10y": float(np.exp((index.iloc[-1] - index.iloc[-41]) / 10) - 1),
+              "annual_sd": float(np.log(last10).std())}
     _dump("summary.json", {
+        "growth": growth,
         "headline": {"within10": float(hl["u12_within_10pct"]), "mdae": float(hl["u12_median_abs_error"]),
                      "r2": float(hl["all_r2"]), "n_val": int(hl["n_val"]), "n_val_u12": int(hl["n_val_under_1.2m"]),
                      "fold_mean": float(per_fold.loc["lightgbm_seed_avg"].mean()), "n_addresses": len(P),

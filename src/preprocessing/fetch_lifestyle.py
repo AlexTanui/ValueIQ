@@ -1,4 +1,4 @@
-"""Pull suburb lifestyle data (crime, livability, income, rent) from the Microburbs API
+"""Pull suburb lifestyle data (crime, livability, income, rent, 1-year unit forecast) from the Microburbs API
 into data/lifestyle.json (git-ignored).
 
 These are CURRENT indicators, so they are used only by the web app's recommendation
@@ -22,6 +22,7 @@ def main():
         income = client.get(f"/v1/suburbs/{sub}/demographics/income") or []
         rent = client.get(f"/v1/suburbs/{sub}/market/median-rent") or {}
         mb = client.get(f"/v1/suburbs/{sub}/crime/by-mesh-block") or {}
+        forecast = (client.get(f"/v1/suburbs/{sub}/forecast/sale") or {}).get("unit") or {}
         result["suburbs"][sub] = {
             "crime_rate": crime.get("suburb_median"), "crime_verdict": crime.get("verdict"),
             "crime_vs_national_pct": crime.get("vs_national_pct"),
@@ -29,6 +30,7 @@ def main():
             "median_income": income[0]["median_income"] if income else None,
             "high_income_share": next((b["proportion"] for b in income if b["income_bracket"] == ">$156k"), None),
             "rent_unit_week": rent.get("unit"), "rent_as_of": rent.get("as_of"),
+            "forecast_unit_1y": {k: forecast.get(k) for k in ("low", "most_likely", "high")} if forecast else None,
         }
         result["mb_crime"].update({str(k): v for k, v in (mb.get("mesh_blocks") or {}).items()})
         s = result["suburbs"][sub]

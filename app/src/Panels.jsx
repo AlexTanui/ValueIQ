@@ -118,7 +118,54 @@ function IndexChart({ index }) {
   )
 }
 
-export function AddressCard({ a, building, comps, onBack, onBuilding }) {
+function projection(value, f1, growth) {
+  // Year 1: Microburbs suburb unit forecast (low / most likely / high) when available.
+  // Years 2-5: ValuIQ index long-run growth (10-year CAGR to Aug 2026), band widening with historical volatility.
+  const g = growth.cagr_10y, sd = growth.annual_sd
+  const y1 = f1 ? { low: value * (1 + f1.low), mid: value * (1 + f1.most_likely), high: value * (1 + f1.high) }
+    : { low: value * Math.exp(g - sd), mid: value * (1 + g), high: value * Math.exp(g + sd) }
+  const rows = [{ t: 0, low: value, mid: value, high: value }, { t: 1, ...y1 }]
+  for (let t = 2; t <= 5; t++) {
+    const mid = y1.mid * Math.pow(1 + g, t - 1), w = sd * Math.sqrt(t - 1)
+    rows.push({ t, mid, low: mid * (y1.low / y1.mid) * Math.exp(-w), high: mid * (y1.high / y1.mid) * Math.exp(w) })
+  }
+  return rows
+}
+
+function Forecast({ value, f1, growth }) {
+  const rows = projection(value, f1, growth)
+  const W = 360, H = 120, L = 44, R = 10, T = 8, B = 20
+  const max = Math.max(...rows.map((r) => r.high)) * 1.02, min = Math.min(...rows.map((r) => r.low)) * 0.98
+  const x = (t) => L + ((W - L - R) * t) / 5, y = (v) => T + (H - T - B) * (1 - (v - min) / (max - min))
+  const band = rows.map((r) => `${x(r.t)},${y(r.high)}`).join(' ') + ' ' + rows.slice().reverse().map((r) => `${x(r.t)},${y(r.low)}`).join(' ')
+  return (
+    <>
+      <h3>Value outlook, 1 to 5 years <span className="tag">scenario</span></h3>
+      <div className="chart">
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Projected value range over five years">
+          {[min, (min + max) / 2, max].map((v) => (
+            <g key={v}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className="grid" />
+              <text x={L - 6} y={y(v) + 3} textAnchor="end" className="tick">{moneyShort(v)}</text></g>
+          ))}
+          {rows.map((r) => <text key={r.t} x={x(r.t)} y={H - 4} textAnchor="middle" className="tick">{r.t === 0 ? 'Aug 26' : `+${r.t}y`}</text>)}
+          <polygon points={band} className="band" />
+          <path d={rows.map((r, k) => `${k ? 'L' : 'M'}${x(r.t)},${y(r.mid)}`).join('')} className="line" />
+          {rows.map((r) => <circle key={r.t} cx={x(r.t)} cy={y(r.mid)} r="3" className="dot" />)}
+        </svg>
+      </div>
+      <table>
+        <thead><tr><th>Year</th>{rows.slice(1).map((r) => <th key={r.t}>+{r.t}y</th>)}</tr></thead>
+        <tbody>
+          <tr><td>Central</td>{rows.slice(1).map((r) => <td key={r.t}>{moneyShort(r.mid)}</td>)}</tr>
+          <tr><td>Range</td>{rows.slice(1).map((r) => <td key={r.t} className="rng">{moneyShort(r.low)}–{moneyShort(r.high)}</td>)}</tr>
+        </tbody>
+      </table>
+      <p className="note">Not part of the valuation and not validated. Year 1 uses the current Microburbs 1-year unit forecast for {f1 ? 'this suburb' : 'the city (no suburb forecast available)'}. Years 2–5 continue at ValuIQ's long-run index growth of {(growth.cagr_10y * 100).toFixed(1)}% a year (10 years to Aug 2026), with the range widening by historical volatility.</p>
+    </>
+  )
+}
+
+export function AddressCard({ a, building, comps, onBack, onBuilding, forecast, growth }) {
   const ev = [
     ['Own last sale', a.ownYears != null ? `sold ${a.ownYears} yrs ago, indexed to Aug 2026` : 'no earlier sale on record', a.own],
     ['Same building', a.bldbedN ? `${a.bldbedN} similar unit sale${a.bldbedN === 1 ? '' : 's'}, indexed` : 'no similar sales on record', a.bldbed],
@@ -151,6 +198,8 @@ export function AddressCard({ a, building, comps, onBack, onBuilding }) {
         <div className="track"><span style={{ width: `${(a.value / max) * 100}%` }} /></div>
         <div className="num"><strong>{moneyShort(a.value)}</strong></div>
       </div>
+
+      {growth && <Forecast value={a.value} f1={forecast} growth={growth} />}
 
       <h3>Recent sales in this building <button className="link small" onClick={onBuilding}>see all units →</button></h3>
       <CompTable comps={comps} />
