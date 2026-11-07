@@ -85,10 +85,10 @@ export default function App() {
         <div className="panel">
           {selected ? (
             <AddressCard a={selected} building={buildings[selected.building]} comps={comps[selected.building] || []}
-              onBack={back} onBuilding={() => selectBuilding(selected.building)} growth={summary.growth} />
+              onBack={back} onBuilding={() => selectBuilding(selected.building)} growth={summary.growth} isPublic={summary.public} />
           ) : buildingId != null ? (
             <BuildingCard b={buildings[buildingId]} units={(byBuilding?.get(buildingId) || []).map((i) => [i, addressRow(addresses[i])])}
-              comps={comps[buildingId] || []} onBack={back} onSelect={selectAddress} />
+              comps={comps[buildingId] || []} onBack={back} onSelect={selectAddress} isPublic={summary.public} />
           ) : (
             <>
               <div className="seg three" role="tablist" aria-label="Mode">
@@ -97,7 +97,7 @@ export default function App() {
                 ))}
               </div>
               {layer === 'ask'
-                ? <Assistant addresses={addresses} lifestyle={lifestyle} chat={chat} setChat={setChat} onResults={showRecs} onSelect={selectAddress} />
+                ? summary.public ? <p className="lede">Ask ValuIQ ranks flats using supplied bedroom data and current Microburbs lifestyle data, which can't be published. It runs in the local version and is shown in our demo video.</p> : <Assistant addresses={addresses} lifestyle={lifestyle} chat={chat} setChat={setChat} onResults={showRecs} onSelect={selectAddress} />
                 : <Overview summary={summary} layer={layer} theme={theme} valueBins={valueBins} setValueBins={setValueBins} binCounts={binCounts} />}
             </>
           )}

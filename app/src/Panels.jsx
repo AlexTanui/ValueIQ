@@ -171,7 +171,7 @@ function Forecast({ value, suburb, growth }) {
   )
 }
 
-export function AddressCard({ a, building, comps, onBack, onBuilding, growth }) {
+export function AddressCard({ a, building, comps, onBack, onBuilding, growth, isPublic }) {
   const ev = [
     ['Own last sale', a.ownYears != null ? `sold ${a.ownYears} yrs ago, indexed to Aug 2026` : 'no earlier sale on record', a.own],
     ['Same building', a.bldbedN ? `${a.bldbedN} similar unit sale${a.bldbedN === 1 ? '' : 's'}, indexed` : 'no similar sales on record', a.bldbed],
@@ -191,6 +191,7 @@ export function AddressCard({ a, building, comps, onBack, onBuilding, growth }) 
       <div className="muted">Within-10% band {money(a.value * 0.9)} – {money(a.value * 1.1)}</div>
       <div className="chips">{chips.map((c) => <span key={c}>{c}</span>)}</div>
 
+      {isPublic ? <p className="note">Public demo: the evidence behind each value and the building sales history use supplied sale records, so they appear only in the local version.</p> : <>
       <h3>Evidence behind the value</h3>
       {ev.map(([l, s, v]) => (
         <div className="ev" key={l}>
@@ -204,11 +205,13 @@ export function AddressCard({ a, building, comps, onBack, onBuilding, growth }) 
         <div className="track"><span style={{ width: `${(a.value / max) * 100}%` }} /></div>
         <div className="num"><strong>{moneyShort(a.value)}</strong></div>
       </div>
+      </>}
 
       {growth?.band_log && <Forecast value={a.value} suburb={a.suburb} growth={growth} />}
 
+      {isPublic ? <h3>Units in this building <button className="link small" onClick={onBuilding}>see all units →</button></h3> : <>
       <h3>Recent sales in this building <button className="link small" onClick={onBuilding}>see all units →</button></h3>
-      <CompTable comps={comps} />
+      <CompTable comps={comps} /></>}
       <p className="note">G-NAF {a.id}. Only sales up to 31 Aug 2026 are used.</p>
     </section>
   )
@@ -228,7 +231,7 @@ function CompTable({ comps }) {
   )
 }
 
-export function BuildingCard({ b, units, comps, onBack, onSelect }) {
+export function BuildingCard({ b, units, comps, onBack, onSelect, isPublic }) {
   const sorted = units.slice().sort((x, y) => (x[1].floor ?? 0) - (y[1].floor ?? 0) || x[1].address.localeCompare(y[1].address, 'en', { numeric: true }))
   return (
     <section className="card-in">
@@ -239,8 +242,8 @@ export function BuildingCard({ b, units, comps, onBack, onSelect }) {
         <Stat k="Median unit value" v={moneyShort(b.value)} />
         <Stat k="Units" v={b.units} d={b.floors ? `up to floor ${b.floors}` : null} />
       </div>
-      <h3>Recent sales</h3>
-      <CompTable comps={comps} />
+      {!isPublic && <><h3>Recent sales</h3>
+      <CompTable comps={comps} /></>}
       <h3>Units ({units.length})</h3>
       <ul className="units">
         {sorted.map(([i, u]) => (
