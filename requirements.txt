@@ -7,3 +7,4 @@ catboost
 scipy
 matplotlib
 python-dotenv
+pyarrow
