@@ -1,0 +1,29 @@
+# Secrets
+.env
+*.key
+
+# Private hackathon data, API output and caches -- never commit
+data/*
+!data/.gitkeep
+cache/
+*.csv
+!/valuation_valuiq.csv
+*.parquet
+*.pkl
+microburbs-hackathon-api.json
+
+# Model outputs (the submission CSV is added deliberately, see README)
+outputs/*
+!outputs/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

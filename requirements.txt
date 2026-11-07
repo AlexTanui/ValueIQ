@@ -1,0 +1,9 @@
+pandas
+numpy
+requests
+scikit-learn
+lightgbm
+catboost
+scipy
+matplotlib
+python-dotenv
