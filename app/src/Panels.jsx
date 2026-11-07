@@ -118,22 +118,21 @@ function IndexChart({ index }) {
   )
 }
 
-function projection(value, f1, growth) {
-  // Year 1: Microburbs suburb unit forecast (low / most likely / high) when available.
-  // Years 2-5: ValuIQ index long-run growth (10-year CAGR to Aug 2026), band widening with historical volatility.
-  const g = growth.cagr_10y, sd = growth.annual_sd
-  const y1 = f1 ? { low: value * (1 + f1.low), mid: value * (1 + f1.most_likely), high: value * (1 + f1.high) }
-    : { low: value * Math.exp(g - sd), mid: value * (1 + g), high: value * Math.exp(g + sd) }
-  const rows = [{ t: 0, low: value, mid: value, high: value }, { t: 1, ...y1 }]
-  for (let t = 2; t <= 5; t++) {
-    const mid = y1.mid * Math.pow(1 + g, t - 1), w = sd * Math.sqrt(t - 1)
-    rows.push({ t, mid, low: mid * (y1.low / y1.mid) * Math.exp(-w), high: mid * (y1.high / y1.mid) * Math.exp(w) })
+function projection(value, suburb, growth) {
+  // ValuIQ's own outlook from sales up to 31 Aug 2026: index 10-year growth adjusted for the suburb,
+  // with a range calibrated by backtesting the same rule from 2005 onwards.
+  const g = growth.city_log_growth + (growth.suburb_adj[suburb] ?? 0)
+  const rows = [{ t: 0, low: value, mid: value, high: value }]
+  for (let t = 1; t <= 5; t++) {
+    const mid = value * Math.exp(g * t), w = growth.band_log[t]
+    rows.push({ t, mid, low: mid * Math.exp(-w), high: mid * Math.exp(w) })
   }
-  return rows
+  return { rows, g }
 }
 
-function Forecast({ value, f1, growth }) {
-  const rows = projection(value, f1, growth)
+function Forecast({ value, suburb, growth }) {
+  const { rows, g } = projection(value, suburb, growth)
+  const bt = growth.backtest
   const W = 360, H = 120, L = 44, R = 10, T = 8, B = 20
   const max = Math.max(...rows.map((r) => r.high)) * 1.02, min = Math.min(...rows.map((r) => r.low)) * 0.98
   const x = (t) => L + ((W - L - R) * t) / 5, y = (v) => T + (H - T - B) * (1 - (v - min) / (max - min))
@@ -160,12 +159,12 @@ function Forecast({ value, f1, growth }) {
           <tr><td>Range</td>{rows.slice(1).map((r) => <td key={r.t} className="rng">{moneyShort(r.low)}–{moneyShort(r.high)}</td>)}</tr>
         </tbody>
       </table>
-      <p className="note">Not part of the valuation and not validated. Year 1 uses the current Microburbs 1-year unit forecast for {f1 ? 'this suburb' : 'the city (no suburb forecast available)'}. Years 2–5 continue at ValuIQ's long-run index growth of {(growth.cagr_10y * 100).toFixed(1)}% a year (10 years to Aug 2026), with the range widening by historical volatility.</p>
+      <p className="note">ValuIQ's own outlook, built only from sales up to 31 Aug 2026. Central growth is {(Math.expm1(g) * 100).toFixed(1)}% a year: our repeat-sales index's 10-year trend ({(Math.expm1(growth.city_log_growth) * 100).toFixed(1)}%), adjusted by this suburb's repeat-sale record. Backtested from 2005, the same rule's median error was {bt[1].median_abs_error_pct.toFixed(1)}% at 1 year, {bt[3].median_abs_error_pct.toFixed(1)}% at 3 years and {bt[5].median_abs_error_pct.toFixed(1)}% at 5 years. The shaded range would have captured about two-thirds of past outcomes. This is a scenario, not part of the valuation.</p>
     </>
   )
 }
 
-export function AddressCard({ a, building, comps, onBack, onBuilding, forecast, growth }) {
+export function AddressCard({ a, building, comps, onBack, onBuilding, growth }) {
   const ev = [
     ['Own last sale', a.ownYears != null ? `sold ${a.ownYears} yrs ago, indexed to Aug 2026` : 'no earlier sale on record', a.own],
     ['Same building', a.bldbedN ? `${a.bldbedN} similar unit sale${a.bldbedN === 1 ? '' : 's'}, indexed` : 'no similar sales on record', a.bldbed],
@@ -199,7 +198,7 @@ export function AddressCard({ a, building, comps, onBack, onBuilding, forecast, 
         <div className="num"><strong>{moneyShort(a.value)}</strong></div>
       </div>
 
-      {growth && <Forecast value={a.value} f1={forecast} growth={growth} />}
+      {growth?.band_log && <Forecast value={a.value} suburb={a.suburb} growth={growth} />}
 
       <h3>Recent sales in this building <button className="link small" onClick={onBuilding}>see all units →</button></h3>
       <CompTable comps={comps} />

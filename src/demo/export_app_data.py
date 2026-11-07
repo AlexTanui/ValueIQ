@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.models.outlook import backtest, city_growth, suburb_adjustments
 from src.models.price_index import build_index, index_at
 from src.predict import INFO_CUTOFF
 from src.preprocessing.clean_data import load_properties, load_sales
@@ -107,11 +108,12 @@ def main():
     comparison = [{"label": MODEL_LABELS[m], "value": float(last.loc[m, "u12_within_10pct"]),
                    "ours": m == "lightgbm_seed_avg"} for m in MODEL_LABELS]
     comparison += [{"label": l, "value": v, "ours": False, "organiser": True} for l, v in BENCHMARKS]
-    # Long-run growth from our own index (sales up to 31 Aug 2026), for the 2-5 year scenario
-    annual = np.exp(index.diff(4).dropna())  # year-on-year growth factors, quarterly steps
-    last10 = annual[annual.index > index.index[-1] - 40]
-    growth = {"cagr_10y": float(np.exp((index.iloc[-1] - index.iloc[-41]) / 10) - 1),
-              "annual_sd": float(np.log(last10).std())}
+    # ValuIQ outlook: own index growth, suburb adjustments, backtest-calibrated range (data <= 31 Aug 2026)
+    g_city, sd = city_growth(index)
+    sub_adj, sub_n = suburb_adjustments(sales, INFO_CUTOFF)
+    bt = backtest(index)
+    growth = {"city_log_growth": g_city, "annual_sd": sd, "suburb_adj": sub_adj, "suburb_pairs": sub_n,
+              "band_log": {h: v["band_log"] for h, v in bt.items()}, "backtest": bt}
     _dump("summary.json", {
         "growth": growth,
         "headline": {"within10": float(hl["u12_within_10pct"]), "mdae": float(hl["u12_median_abs_error"]),

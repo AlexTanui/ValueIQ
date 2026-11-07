@@ -76,8 +76,7 @@ export default function App() {
         <div className="panel">
           {selected ? (
             <AddressCard a={selected} building={buildings[selected.building]} comps={comps[selected.building] || []}
-              onBack={back} onBuilding={() => selectBuilding(selected.building)}
-              forecast={lifestyle?.suburbs?.[selected.suburb]?.forecast_unit_1y} growth={summary.growth} />
+              onBack={back} onBuilding={() => selectBuilding(selected.building)} growth={summary.growth} />
           ) : buildingId != null ? (
             <BuildingCard b={buildings[buildingId]} units={(byBuilding?.get(buildingId) || []).map((i) => [i, addressRow(addresses[i])])}
               comps={comps[buildingId] || []} onBack={back} onSelect={selectAddress} />
